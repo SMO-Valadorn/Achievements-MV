@@ -1,5 +1,5 @@
 /*:
-* @plugindesc v1.00 - Creates an achievements menu.
+* @plugindesc v1.01 - Creates an achievements menu.
 * @author SMO
 *
 * @param Range
@@ -44,6 +44,12 @@
 * @off OFF
 * @desc If ON, "Hidden" achievements won't be part of the total progress calculation.
 * @default false
+*
+* @param Global Rewards
+* @type boolean
+* @desc If ON, the player will gain all the unlocked achievements'
+* rewards when starting a new game. (Global range only)
+* @default true
 *
 * @param Auto Refresh
 * @type boolean
@@ -597,6 +603,9 @@
 *------------------------------------------------------------------------------
 * Changelog
 *------------------------------------------------------------------------------
+*
+* V 1.01 New parameter added: Global Rewards;
+*
 * V 1.00 Plugin released!
 *
 *------------------------------------------------------------------------------
@@ -930,7 +939,6 @@
 * @default "main = unlocked.concat(locked);\nmain.sort((a, b) => a.Name.localeCompare(b.Name, 'en', { sensitivity: 'base' }));"
 *
 */
-
 var Imported = Imported || {};
 var SMO = SMO || {};
 Imported.SMO_Achievements = true;
@@ -1017,7 +1025,8 @@ Bitmap.prototype.drawRectS = function(x, y, width, height, borderSize, borderCol
 //===============================================================================================
 SMO.getParams = PluginManager.parameters('SMO_Achievements');
 
-SMO.AM.range = String(SMO.getParams['Range']);
+SMO.AM.isGlobalRange = String(SMO.getParams['Range']) === 'Global' ? true : false;
+SMO.AM.isGlobalRewards = SMO.AM.isGlobalRange && String(SMO.getParams['Global Rewards']) === 'true' ? true : false;
 SMO.AM.background = String(SMO.getParams['Menu Background']);
 SMO.AM.autoRefresh = eval(SMO.getParams['Auto Refresh']);
 SMO.AM.updateInterval = Number(SMO.getParams['Update Interval']);
@@ -1264,7 +1273,7 @@ Achievement_Data.prototype.lock = function(){
 				PopUp._queue.delete(this.id);
 			}
 		}
-		if (SMO.AM.range === 'Global'){
+		if (SMO.AM.isGlobalRange){
 			SMO.AM.saveGlobalAchievements();
 		}
 	}
@@ -1375,7 +1384,7 @@ SMO.AM.FrameCount = {
 };
 
 SMO.AM.playtime = function(){
-	if (this.range == 'Global'){
+	if (this.isGlobalRange){
 		return Math.floor(this.FrameCount.value / 60);
 	} else {
 		return $gameSystem.playtime();
@@ -1451,8 +1460,8 @@ SMO.AM.uniteArrayWithStrings = function(array, between){
 	return union;
 }
 
-if (SMO.AM.range === 'Global' && !Utils.isNwjs()){
-	SMO.AM.range = 'Local';
+if (SMO.AM.isGlobalRange && !Utils.isNwjs()){
+	SMO.AM.isGlobalRange = false;
 	console.warn('Global achievements do not work out of Node.js, the achievement\'s range was adjusted to "Local".');
 }
 
@@ -1492,12 +1501,12 @@ SMO.AM.setupAchievements = function(){
 		}
 	}
 	Window_Achievements.prototype.refreshUnlockedTrophies.call(this);
-	if (changed && SMO.AM.range === 'Global'){
+	if (changed && SMO.AM.isGlobalRange){
 		SMO.AM.saveGlobalAchievements();
 	}
 }
 
-if (SMO.AM.range === 'Global'){
+if (SMO.AM.isGlobalRange){
 //-----------------------------------------------------------------------------------------------
 // Global Achievements
 // Saving global achievements does not work on browser.
@@ -1553,13 +1562,13 @@ SMO.AM.loadGlobalAchievements = function() {
 };
 SMO.AM.loadGlobalAchievements();
 
-}//SMO.AM.range === 'Global'
+}//SMO.AM.isGlobalRange
 
 //-----------------------------------------------------------------------------------------------
 // Commands
 
 SMO.AM.Achievements = function(){
-	if (this.range === 'Global'){
+	if (this.isGlobalRange){
 		return this.GlobalAchievements;
 	} else {
 		return $gameSystem;
@@ -1617,7 +1626,7 @@ SMO.AM.refreshAchievements = function(){
 			scene._achievementPopUp.show();
 		}
 
-		if (SMO.AM.range === 'Global'){
+		if (SMO.AM.isGlobalRange){
 			SMO.AM.saveGlobalAchievements();
 		}
 	}
@@ -1707,7 +1716,7 @@ SMO.AM.resetAchievementsData = function(){
 		SMO.AM.Achievements().trophies.locked.push(c + 1)
 	}
 
-	if (this.range === 'Global'){
+	if (this.isGlobalRange){
 		this.saveGlobalAchievements();
 	}
 
@@ -1872,6 +1881,11 @@ SMO.AM._DataManager_setupNewGame = DataManager.setupNewGame;
 DataManager.setupNewGame = function(){
 	SMO.AM._DataManager_setupNewGame.call(this);
 	$gameSystem.setupAchievs();
+	if (SMO.AM.isGlobalRewards){
+		SMO.AM.Achievements().achievs.unlocked.forEach(function(a){
+			$gameSystem.achievement(a).gainRewards();
+		});
+	}
 	SMO.AM.FrameCount.lastValue = 0;
 }
 
@@ -1888,7 +1902,7 @@ Scene_Load.prototype.reloadMapIfUpdated = function(){
 //===============================================================================================
 Game_System.prototype.setupAchievs = function(){
 	if (this.achievs){
-		if (SMO.AM.range != 'Global'){
+		if (!SMO.AM.isGlobalRange){
 			SMO.AM.setupAchievements.call(this);
 		}
 		if (SMO.AM.Sort.enabled){
@@ -1992,7 +2006,7 @@ Scene_Base.prototype.update = function(){
 }
 
 Scene_Base.prototype.updateFrameS = function(){
-	if (SMO.AM.range != 'Global') return;
+	if (!SMO.AM.isGlobalRange) return;
 	if (SMO.AM.FrameCount.lastValue !== Graphics.frameCount){
 		SMO.AM.FrameCount.value += Graphics.frameCount - SMO.AM.FrameCount.lastValue;
 		SMO.AM.FrameCount.lastValue = Graphics.frameCount;
@@ -2001,7 +2015,7 @@ Scene_Base.prototype.updateFrameS = function(){
 
 Scene_Base.prototype.updateAchievements = function(){
 	if (this instanceof Scene_Boot) return;
-	if (this instanceof Scene_Title && SMO.AM.range != 'Global') return;
+	if (this instanceof Scene_Title && !SMO.AM.isGlobalRange) return;
 	var volume;
 
 	if (SMO.AM.PopUp.state && !this._achievementPopUp){
@@ -2282,7 +2296,7 @@ Achievement_PopUp.prototype.update = function(){
 // Scene Title
 // Adding the title command (on global range only)
 //===============================================================================================
-if (SMO.AM.range === 'Global'){
+if (SMO.AM.isGlobalRange){
 
 SMO.AM._SceneTitle_createCommandWindow = Scene_Title.prototype.createCommandWindow;
 Scene_Title.prototype.createCommandWindow = function() {
@@ -2305,7 +2319,7 @@ Window_TitleCommand.prototype.makeCommandList = function() {
 	}
 };
 
-}//SMO.AM.range === 'Global'
+}//SMO.AM.isGlobalRange
 
 //===============================================================================================
 // Scene Menu
@@ -2528,7 +2542,7 @@ Scene_Achievements.prototype.clearRecentUnlock = function(){
 	toDelete.forEach(function(a){
 		SMO.AM.Achievements().achievs.recentUnlock.delete(a);
 	})
-	if (SMO.AM.range === 'Global'){
+	if (SMO.AM.isGlobalRange){
 		SMO.AM.saveGlobalAchievements();
 	}
 }
@@ -2736,6 +2750,7 @@ Window_Achievements.prototype.initialize = function(){
 }
 
 Window_Achievements.prototype.refreshUnlockedTrophies = function(){
+	//if (!SMO.AM.Achievements()) return;
 	var all, unlocked, dataChanged = false;
 	for (var c = 0; c < SMO.AM.Categories.length; c++){
 		if (SMO.AM.Achievements().trophies.locked.contains(c + 1)){
@@ -2749,7 +2764,7 @@ Window_Achievements.prototype.refreshUnlockedTrophies = function(){
 			}
 		}
 	}
-	if (SMO.AM.range === 'Global' && dataChanged){
+	if (SMO.AM.isGlobalRange && dataChanged){
 		SMO.AM.saveGlobalAchievements();
 	}
 }
