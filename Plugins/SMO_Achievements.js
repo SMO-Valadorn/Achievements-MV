@@ -1,5 +1,5 @@
 /*:
-* @plugindesc v1.01 - Creates an achievements menu.
+* @plugindesc v1.02 - Creates an achievements menu.
 * @author SMO
 *
 * @param Range
@@ -40,8 +40,6 @@
 *
 * @param Hide Totally
 * @type boolean
-* @on ON
-* @off OFF
 * @desc If ON, "Hidden" achievements won't be part of the total progress calculation.
 * @default false
 *
@@ -603,6 +601,10 @@
 *------------------------------------------------------------------------------
 * Changelog
 *------------------------------------------------------------------------------
+*
+* V 1.02 Fixed bug with plugin commands;
+*        Fixed bug where achievements unlocked with script calls were not
+*        being saved on global range;
 *
 * V 1.01 New parameter added: Global Rewards;
 *
@@ -1251,7 +1253,7 @@ Achievement_Data.prototype.unlock = function(){
 	if ($gameSystem.achievPopUp.queue.length === 1){
 		scene._achievementPopUp.show();
 	}
-	Window_Achievements.prototype.refreshUnlockedTrophies.call(this);
+	Window_Achievements.prototype.refreshUnlockedTrophies.call(this, true);
 	if (scene._trophiesWindow && scene._trophiesWindow.visible){
 		scene._trophiesWindow.refresh();
 	}
@@ -1500,10 +1502,7 @@ SMO.AM.setupAchievements = function(){
 			}
 		}
 	}
-	Window_Achievements.prototype.refreshUnlockedTrophies.call(this);
-	if (changed && SMO.AM.isGlobalRange){
-		SMO.AM.saveGlobalAchievements();
-	}
+	Window_Achievements.prototype.refreshUnlockedTrophies.call(this, changed);
 }
 
 if (SMO.AM.isGlobalRange){
@@ -1613,7 +1612,7 @@ SMO.AM.refreshAchievements = function(){
 			scene._goldWindow.refresh();
 		}
 
-		Window_Achievements.prototype.refreshUnlockedTrophies.call(this);
+		Window_Achievements.prototype.refreshUnlockedTrophies.call(this, true);
 		if (scene._itemWindow){
 			if (scene._trophiesWindow && scene._trophiesWindow.visible){
 				scene._trophiesWindow.refresh();
@@ -1624,10 +1623,6 @@ SMO.AM.refreshAchievements = function(){
 
 		if (scene._achievementPopUp && !scene._achievementPopUp._isBusy){
 			scene._achievementPopUp.show();
-		}
-
-		if (SMO.AM.isGlobalRange){
-			SMO.AM.saveGlobalAchievements();
 		}
 	}
 	SMO.AM.toUnlock = [];
@@ -1713,7 +1708,7 @@ SMO.AM.resetAchievementsData = function(){
 	})
 
 	for (var c = 0; c < this.categories.length; c++){
-		SMO.AM.Achievements().trophies.locked.push(c + 1)
+		SMO.AM.Achievements().trophies.locked.push(c + 1);
 	}
 
 	if (this.isGlobalRange){
@@ -2749,8 +2744,7 @@ Window_Achievements.prototype.initialize = function(){
 	this.refreshUnlockedTrophies();
 }
 
-Window_Achievements.prototype.refreshUnlockedTrophies = function(){
-	//if (!SMO.AM.Achievements()) return;
+Window_Achievements.prototype.refreshUnlockedTrophies = function(forceSave){
 	var all, unlocked, dataChanged = false;
 	for (var c = 0; c < SMO.AM.Categories.length; c++){
 		if (SMO.AM.Achievements().trophies.locked.contains(c + 1)){
@@ -2764,7 +2758,7 @@ Window_Achievements.prototype.refreshUnlockedTrophies = function(){
 			}
 		}
 	}
-	if (SMO.AM.isGlobalRange && dataChanged){
+	if (SMO.AM.isGlobalRange && (dataChanged || forceSave)){
 		SMO.AM.saveGlobalAchievements();
 	}
 }
@@ -3781,8 +3775,8 @@ Sort_Option.prototype.onClick = function(index){
 SMO.AM._GameInterpreter_pluginCommand = Game_Interpreter.prototype.pluginCommand;
 Game_Interpreter.prototype.pluginCommand = function(command, args){
 	SMO.AM._GameInterpreter_pluginCommand.call(this, command, args);
-	var lowercCommand = command.toLowerCase();
-	if (lowercCommand === 'showachievements'){
+	var lowerCommand = command.toLowerCase();
+	if (lowerCommand === 'showachievements'){
 		SMO.AM.showAchievements(args[0]);
 	} else if (lowerCommand === 'refreshachievements'){
 		SMO.AM.refreshAchievements();
