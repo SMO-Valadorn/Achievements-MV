@@ -1,5 +1,5 @@
 /*:
-* @plugindesc v1.02 - Creates an achievements menu.
+* @plugindesc v1.03 - Adds an achievements mechanic.
 * @author SMO
 *
 * @param Range
@@ -14,17 +14,17 @@
 * @type struct<categories>[]
 * @desc Add/edit the categories you want here. Leave it empty
 * if you don't want to use categories.
-* @default ["{\"Category Name\":\"All\",\"Trophy\":\"\",\"Description\":\"\\\"Congratulations, you completed\\\\nall the achievements on the game.\\\"\",\"Image\":\"\"}"]
+* @default ["{\"Category Name\":\"Battle\",\"Cat Background\":\"\",\"Trophy\":\"----------\",\"Hide Trophy\":\"false\",\"Trophy Description\":\"\\\"This is a description.\\\"\",\"Trophy Image\":\"\",\"On Unlock\":\"\"}"]
 *
 * @param Achievements Data
 * @type struct<data>[]
 * @desc Create/edit the data of each achievement here.
-* @default ["{\"Name\":\"Slime Slayer\",\"Category\":\"All\",\"Description\":\"\\\"Kill 10 Slimes.\\\"\",\"Visibility\":\"Visible from start\",\"Background Image\":\"\",\"Requirements\":\"[\\\"{\\\\\\\"Type\\\\\\\":\\\\\\\"Switch\\\\\\\",\\\\\\\"Item ID\\\\\\\":\\\\\\\"1\\\\\\\",\\\\\\\"Comparison\\\\\\\":\\\\\\\"≥\\\\\\\",\\\\\\\"Value\\\\\\\":\\\\\\\"1\\\\\\\",\\\\\\\"Alias\\\\\\\":\\\\\\\"\\\\\\\",\\\\\\\"Advanced\\\\\\\":\\\\\\\"------\\\\\\\",\\\\\\\"Current Value\\\\\\\":\\\\\\\"\\\\\\\",\\\\\\\"Final Value\\\\\\\":\\\\\\\"\\\\\\\"}\\\"]\",\"Rewards\":\"\",\"Icons\":\"------\",\"Locked Icon\":\"-2\",\"Unlocked Icon\":\"-2\",\"Secret Icon\":\"-2\"}"]
+* @default ["{\"Name\":\"Slime Slayer\",\"Category\":\"Battle\",\"Description\":\"\\\"Kill 10 Slimes.\\\"\",\"Visibility\":\"Visible from start\",\"Background Image\":\"\",\"Pop Up Image\":\"\",\"Requirements\":\"[\\\"{\\\\\\\"Type\\\\\\\":\\\\\\\"Switch\\\\\\\",\\\\\\\"Item ID\\\\\\\":\\\\\\\"1\\\\\\\",\\\\\\\"Comparison\\\\\\\":\\\\\\\"≥\\\\\\\",\\\\\\\"Required Value\\\\\\\":\\\\\\\"1\\\\\\\",\\\\\\\"Alias\\\\\\\":\\\\\\\"\\\\\\\",\\\\\\\"Alias Icon\\\\\\\":\\\\\\\"-1\\\\\\\",\\\\\\\"Advanced\\\\\\\":\\\\\\\"------\\\\\\\",\\\\\\\"Current Value\\\\\\\":\\\\\\\"\\\\\\\",\\\\\\\"Final Value\\\\\\\":\\\\\\\"\\\\\\\"}\\\"]\",\"Rewards\":\"\",\"Icons\":\"------\",\"Locked Icon\":\"-2\",\"Unlocked Icon\":\"-2\",\"Secret Icon\":\"-2\"}"]
 *
 * @param Texts and Colors
 * @type struct<texts>
 * @desc Customize texts and it's colors using the parameters below.
-* @default {"Menu Name":"Achievements","Progress":"Total Progress:","Trophies":"TROPHIES","None":"None","Requirements":"Requirements:","Rewards":"Rewards:","Locked":"LOCKED","Unlocked":"Unlocked:","Unlocked In":"Unlocked in \\date at \\time","Secret Sign":"???","Secret Achiev":"\"This is a secret achievement. \\nIt'll be revealed once it's\\nrequirements are met.\"","Trophies Description":"\"Unlock trophies by completing achievements. Each category unlocks a different trophy.\"","Unlocked Color":"#00FF00","Selector Color":"#FF9900","Gauge Color 1":"rgba(20,255,20,1)","Gauge Color 2":"rgba(100,255,100,1)"}
+* @default {"Menu Name":"Achievements","Progress":"Total Progress:","Trophies":"TROPHIES","None":"None","Requirements":"Requirements:","Rewards":"Rewards:","Locked":"LOCKED","Unlocked On":"Unlocked on <date> at <time>","Secret Sign":"???","Secret Achiev":"\"This is a secret achievement. \\nIt'll be revealed once it's\\nrequirements are met.\"","Trophies Description":"\"Unlock trophies by completing achievements. Each category unlocks a different trophy.\"","Unlocked Color":"#00FF00","Selector Color":"#FF9900","Gauge Color 1":"rgba(20,255,20,1)","Gauge Color 2":"rgba(100,255,100,1)"}
 *
 * @param On Unlock
 * @type note
@@ -49,6 +49,20 @@
 * rewards when starting a new game. (Global range only)
 * @default true
 *
+* @param Locked Achiev Background
+* @type file
+* @dir img/achievements
+* @require 1
+* @desc Choose an image as background for all the locked (non secret) the achievemets.
+* @default
+*
+* @param Secret Achiev Background
+* @type file
+* @dir img/achievements
+* @require 1
+* @desc Choose an image as background for all the secret the achievemets.
+* @default
+*
 * @param Auto Refresh
 * @type boolean
 * @on YES
@@ -70,6 +84,15 @@
 * @desc If OFF, the Trophies window will instead show the latest
 * achievements unlocked.
 * @default true
+*
+* @param Trophy Selector
+* @parent Use Trophies
+* @type select
+* @option Grow
+* @option Cursor
+* @desc Grow   -> The trophy will grow in size when selected.
+* Cursor -> An image will appear around the trophy.
+* @default Grow
 *
 * @param Trophies Lines
 * @parent Use Trophies
@@ -192,6 +215,12 @@
 * player can click on it and go to the achievement's menu?
 * @default true
 *
+* @param Pop Up Text
+* @parent Pop Up Window
+* @type note
+* @desc The text shown on the pop up window, text codes are allowed.
+* @default "<center>\\c[1]\\}Unlocked: \n<center>\\c[0]\\{<achievName>"
+*
 * @param Pop Up X
 * @parent Pop Up Window
 * @desc The X position for the Pop Up Window. You can use formulas.
@@ -215,6 +244,11 @@
 * @desc The height for the Pop Up Window. You can use formulas.
 * Default: 106
 * @default 106
+*
+* @param Pop Up Borders
+* @parent Pop Up Window
+* @desc Choose a color for the pop up's borders. Leave it empty if you don't want borders.
+* @default rgba(0,0,0,0.8)
 *
 * @param Sort Options
 * @type struct<sort>[]
@@ -268,7 +302,7 @@
 *
 * CATEGORIES
 * With the parameter "Categories And Trophies" you can customize your
-* categories' names and the trophies' descriptions and images.
+* categories' names/images and the trophies' in general.
 *
 * If you don't want to use categories you can erase all data inside this
 * parameter, but then the trophies window will also disappear.
@@ -290,6 +324,35 @@
 * same name.
 *
 *------------------------------------------------------------------------------
+* ACHIEVEMENTS DATA
+*------------------------------------------------------------------------------
+* Like said before, this parameter is where you add/change or remove your
+* achievements.
+*
+* A simple setup for this parameter would be like:
+* 1 {achievement data} -> this achievement will have ID 1
+* 2 {achievement data} -> ID 2
+* 3 {achievement data} -> ID 3
+*
+* The numbers on the left are the lines, if you don't add any custom line they
+* will also match the achievement id. For organization pourposes you can add
+* custom texts inside this structure (but only on this one), if you do so it'll
+* look like this:
+* 1 Custom text -> ignored by the plugin
+* 2 Custom text -> ignored by the plugin
+* 3 {achievement data} -> ID 1
+* 4 {achievement data} -> ID 2
+* 5 Custom text -> ignored by the plugin
+* 6 {achievement data} -> ID 3
+*
+* As you can see the lines do not match the achievements' ids anymore, the
+* id's are given based on the achievements order on the list ignoring the
+* custom texts. Any line can be a custom text, as long as it doesn't start
+* with a "{".
+*
+* Check this plugin's demo to see an example of setup for this parameter.
+*
+*------------------------------------------------------------------------------
 * REQUIREMENTS and REWARDS
 *------------------------------------------------------------------------------
 * TYPE
@@ -303,7 +366,7 @@
 * COMPARISON
 * It's recommended to leave the "Comparison" in "≥". 
 * While using "≥", the achievement's unlock progress will be calculated based
-* on this requirement's current/maximun value, when using other comparisons
+* on this requirement's current/required value, when using other comparisons
 * the progress will be based on whether the requirement has been met or not.
 *
 * Example:
@@ -312,12 +375,15 @@
 * This will show 50% if the comparison is "≥", but if it's not, it'll show 0%
 * until the you reach the 10 steps, then it'll change to 100%.
 *
-* VALUE
+* REQUIRED VALUE
 * It's gonna be compared with the current value of the selected item. That's
 * the target value.
 *
 * For example, let's say that you've chosen:
-* Type = Variable, Item ID = 1, Comparison = ≥ and Value = 10.
+* Type           = Variable 
+* Item ID        = 1
+* Comparison     = ≥
+* Required Value = 10
 *
 * This requirement will be met only when the variable 1's value is equal or 
 * bigger than 10.
@@ -326,9 +392,10 @@
 * If you don't wanna show this requirement's default name you can give it a
 * custom name using this parameter.
 * You can make use of the following text codes:
-* \value1 -> replaced by this item's current value;
-* \value2 -> replaced by this item's target value (The same value chosen on
-* the parameter "Value");
+* <CurrentValue>  -> replaced by this item's "Current Value";
+* <RequiredValue> -> replaced by this item's "Required Value" (or by the
+* "Final Value" if you're using a Custom(Advanced) type);
+*
 * Each item Type has a default word in case you don't use an Alias:
 * Custom(Advanced): Custom
 * Switch:           The switch's name
@@ -356,22 +423,47 @@
 * $gameParty.gold() -> Returns the party's gold.
 *
 * The comparison is made based on the "Comparison" parameter, don't forget
-* to check that parameter.
+* to check it out.
 *
-* Finally, the "Final Value" will be compared to the "Current Value" and
-* used to unlock (or not) the achievement. "Final Value" is not required
-* for custom requirements though, if you leave it empty the "Value" 
-* parameter will be used instead.
+* Finally, the "Final Value" will be compared to the "Current Value" to unlock
+* (or not) the achievement. Adding a script on "Final Value" is not required
+* though, if you leave it empty the "Required Value" parameter will be used 
+* instead.
+*
+* Example 1:
+* Current Value: $gameVariables.value(1)
+* Comparison:    ≥
+* Final Value:   $gameVariables.value(2)
+* This requirement will be met when the variable 1's value is equal or
+* bigger than the variable 2's value.
+*
+* Example 2:
+* Current Value: $gameMap.mapId()
+* Comparison:    =
+* Final Value:   12
+* Met when the player arrives on the map with ID 12.
+*
+* Example 3
+* Current Value: $gameSwitches.value(1) || $gameSwitches.value(2)
+* Comparison:    =
+* Final Value:   true
+* Met when the switch 1 or the switch 2 is ON.
+*
+* Example 4 (using YEP_JobPoints):
+* Current Value: $gameActors.actor(1).jp()
+* Comparison:    ≥
+* Final Value:   500
+* Met at if the actor 1 has 500 JP or more on it's current class.
 *
 * It's recommended that you use the "Alias" parameter to customize this
 * requirement's name. If you don't, the word "Custom" will be used as
 * a default name.
 *
 * REWARDS
-* The rewards are similar to the requirements with a few differences. E.G:
+* The rewards are similar to the requirements with a few differences.
 *
 * The "Advanced" parameter is a script call called when the achievement is
-* unlocked, it works with any item type.
+* unlocked, it works with any item type not only with custom.
 *
 *------------------------------------------------------------------------------
 * RANGE
@@ -395,20 +487,51 @@
 * some colors may also be customized here, like the color of an unlocked
 * achievement's text, which is green for default.
 *
-* UNLOCKED IN
-* You can use 2 text codes on this parameter:
-* \date -> replaced by the day/month/year on which the player unlocked it.
-* \time -> replaced by the hour:min:sec on which the player unlocked it.
+* UNLOCKED ON
+* This plugin saves the date on which any achievement is unlocked and you
+* can show it for the player by using this parameter, to do so use the following
+* text codes:
+* <Hour> or <HourA>   -> replaced by the hour (24h style);
+* <HourB>  -> replaced by the hour (AM/PM style);
+* <Phase>  -> replaced by the phase of the day (AM or PM);
+* <Min>    -> replaced by the minutes;
+* <Sec>    -> replaced by the seconds;
+* <Day> or <DayA>     -> replaced by the day (number);
+* <DayB>   -> replaced by the day of the week;
+* <DayC>   -> replaced by the abbreviation of the day of the week;
+* Examples: Saturday -> Sat, Sunday -> Sun, Monday -> Mon
+* <Month> or <MonthA> -> replaced by the month (number);
+* <MonthB> -> replaced by the month's name;
+* <MonthC> -> replaced by the abbreviation of the month's name;
+* Examples: January -> Jun, February -> Feb, December -> Dec
+* <Year>   -> replaced by the year (number);
+* <Date>   -> replaced by the date (day/month/year);
+* <Time>   -> replaced by the time (hour:min:sec);
 *
-* Example: Unlocked in \date at \time -> Unlocked in 19/05/2020 at 19:29:30
+* Examples:
+* Unlocked on <date> at <time> --> Unlocked on 19/05/2020 at 19:29:30
+* Unlocked on <MonthC> <day>, at <HourB>:<min>:<sec> <phase> -->
+*    Unlocked on May 19, at 07:29:30 PM
+* Unlocked on <DayC> <MonthC> <year> --> Unlocked on Tue May 2020
+*
+* Notice that using upper/lower case is irrelevant, you can write
+* <Date> or <date> or <DATE> or any other way you want.
 *
 *------------------------------------------------------------------------------
 * USE TROPHIES
 *------------------------------------------------------------------------------
 * If you don't want to use trophies, you can deactivate this parameter, the
-* trophies window will show the latest achievements unlocked. If you deactivate
-* it you may also want to change the "Trophies" and the "Trophies Description"
-* texts on the "Texts and Colors" parameter.
+* trophies window will show the latest achievements unlocked instead. If you
+* do so, you may also want to change the "Trophies" and the "Trophies
+* Description" texts on the "Texts and Colors" parameter.
+*
+* In order to hide a specific trophy check the parameter "Hide Trophy"
+* inside "Categories And Trophies".
+*
+* Selecting Trophies
+* To select a trophy on the achievs menu make use of the left and right
+* arrow keys, hold them to move the selector faster. It's also possible
+* to click on the trophies to select them.
 * 
 *------------------------------------------------------------------------------
 * POP UP WINDOW
@@ -418,11 +541,50 @@
 * You can customize this window's properties using the plugin's parameters
 * or even deactivate it changing the "Pop Up Window" parameter.
 *
-* When writing formulas for the X and Y positions, one can use PopUp.width and
+* Position
+* When writing formulas for the X and Y coodinates, one can use PopUp.width and
 * PopUp.height to refer to the Pop Up Window's width and height respectively.
 *
+* Button Pop Up
 * This window may also become a button, if so, by clicking on it the player
 * will be taken to the achievement's menu. This feature is also optional.
+*
+* Custom Images
+* For default, achievements will show their background image (the same image
+* you see on the menu) on the pop up, but you can make it show another image
+* using the parameter "Pop Up Image" inside "Achievements Data". In any case,
+* the image chosen will be resized to fit inside the pop up.
+*
+* Custom text
+* It's also possible to write a text above the custom image using the parameter
+* "Pop Up Text", this text allows text codes like \c[x] and \i[x] and others,
+* but not only that, it have some customized text codes you may use:
+* <AchievName>       -> replaced by the achievement's name;
+* <AchievID>         -> replaced by the achievement's ID;
+* <AchievIcon>       -> it'll draw the achievement's icon;
+* <AchievCategory:n> -> replaced by the achievement's n-th category;
+* <center>           -> centralizes this line of text;
+* <right>            -> aligns this line of text to the right of the window;
+* The left alignment is default, so there's no code for that.
+*
+* Example:
+* Let's say you just unlocked the following achievement:
+* Name:     "Beginner"
+* Category: "All,Gameplay"
+* ID:       6
+*
+* If you setup your pop up's text to:
+* Unlocked: <AchievName> (<AchievID>)
+* Cat: <AchievCategory:2>
+* <center>Good Job!
+*
+* The pop up will show:
+* Unlocked: Beginner (6)
+* Cat: Gameplay
+*      Good Job!
+*
+* These codes are case insensitive, which means that you can write <center>,
+* <Center>, <CENTER> or any other way you want.
 *
 *------------------------------------------------------------------------------
 * DEFAULT ICONS
@@ -433,13 +595,23 @@
 *------------------------------------------------------------------------------
 * SORT OPTIONS
 *------------------------------------------------------------------------------
+* You may notice an option on the upper left corner of the achievements menu
+* (A-z), this option may be used to order all the achievements in a specific
+* way. To open this option you may just click on it, once open click in one of
+* the options to re-order the achievements, clicking outside the box will
+* cancel the selection.
+*
+* The keyboard and the gamepad may also be used to command the sort option,
+* press "Shift" to open it, the arrow keys to select a new option and "Ok"
+* (Z or Enter) to confirm or "Cancel" (X or Esc) to cancel.
+*
 * You can add/edit or even remove the sort options with this parameter.
 * By removing all the options you'll deactivate it. You'll need some JavaScript
 * knowledge to create or edit those options.
 *
 * In order to edit the file, one can make use of some variables:
 *
-* locked -> an array which stores all the locked achievements;
+* locked -> an array which stores all the locked (non secret) achievements;
 *
 * unlocked -> an array which stores all the unlocked achievements;
 *
@@ -489,14 +661,14 @@
 *------------------------------------------------------------------------------
 * PLUGIN COMMANDS
 *------------------------------------------------------------------------------
-* Command:
+* Command 1:
 * ShowAchievements
 *
 * Action:
 * Opens the achievements menu.
 *
 *  -  -  -  -  -  -  -  -  -  -
-* Command:
+* Command 2:
 * ShowAchievements categoryName
 *
 * Action:
@@ -506,7 +678,7 @@
 * ShowAchievements Battle
 *
 *  -  -  -  -  -  -  -  -  -  -
-* Command:
+* Command 3:
 * RefreshAchievements
 *
 * Action:
@@ -514,7 +686,7 @@
 * requirements are met.
 *
 *  -  -  -  -  -  -  -  -  -  -
-* Command:
+* Command 4:
 * ResetAchievementsData
 *
 * Action:
@@ -527,7 +699,7 @@
 * the "Achievements Data" parameter, it's based on their order on that list
 * so the first data will have id = 1, the second id = 2 and so on.
 *
-* Script:
+* Script 1:
 * $gameSystem.achievement(id)
 *
 * Action:
@@ -539,56 +711,56 @@
 * $gameSystem.achievement('Slime Slayer');
 *
 *  -  -  -  -  -  -  -  -  -  -
-* Script:
+* Script 2:
 * $gameSystem.achievement(id).isUnlocked()
 *
 * Action:
 * Returns a boolean (true or false).
 *
 *  -  -  -  -  -  -  -  -  -  -
-* Script:
+* Script 3:
 * $gameSystem.achievement(id).isSecret()
 *
 * Action:
 * Returns a boolean (true or false).
 *
 *  -  -  -  -  -  -  -  -  -  -
-* Script:
+* Script 4:
 * $gameSystem.achievement(id).isHidden()
 *
 * Action:
 * Returns a boolean (true or false).
 *
 *  -  -  -  -  -  -  -  -  -  -
-* Script:
+* Script 5:
 * $gameSystem.achievement(id).unlock()
 *
 * Action:
 * Forces this achievement to unlock.
 *
 *  -  -  -  -  -  -  -  -  -  -
-* Script:
+* Script 6:
 * $gameSystem.achievement(id).lock()
 *
 * Action:
 * Locks the achievement again.
 *
 *  -  -  -  -  -  -  -  -  -  -
-* Script:
+* Script 7:
 * $gameSystem.unlockedAchievsCount()
 *
 * Action:
 * Returns the number of achievements unlocked so far.
 *
 *  -  -  -  -  -  -  -  -  -  -
-* Script:
+* Script 8:
 * $gameSystem.lockedAchievsCount()
 *
 * Action:
 * Returns the number of achievements still locked.
 *
 *  -  -  -  -  -  -  -  -  -  -
-* Script:
+* Script 9:
 * $gameSystem.isTrophyUnlocked(id)
 *
 * Action:
@@ -601,14 +773,31 @@
 *------------------------------------------------------------------------------
 * Changelog
 *------------------------------------------------------------------------------
+* V 1.03 
+*    - The info window now open/close instead of just appearing/disappearing;
+*    - Improved wrap text mechanic, and it also works on the info window now;
+*    - Improved performance on the menu;
+*    - Achievements are now refreshed after transfering;
+*    - Parameter "Unlocked In" changed to "Unlocked On";
+*    - New parameters for trophies on "Categories and Trophies": "Hide Trophy",
+*    "Trophy Image" and "On Unlock";
+*    - New parameter inside "Use Trophies": "Trophy Selector";
+*    - Added option to select images for locked and secret achievements (check
+*    out "Locked Achiev Background" and "Secret Achiev Background";
+*    - Added text codes for the pop up's text and for the "Unlocked On" text;
+*    - It's possible to set a different image for the pop up for each achiev,
+*    check out "Pop Up Image" inside "Achievements Data";
 *
-* V 1.02 Fixed bug with plugin commands;
-*        Fixed bug where achievements unlocked with script calls were not
-*        being saved on global range;
+* V 1.02 
+*    - Fixed bug with plugin commands;
+*    - Fixed bug where achievements unlocked with script calls were not
+*    being saved on global range;
 *
-* V 1.01 New parameter added: Global Rewards;
+* V 1.01 
+*    - New parameter added: Global Rewards;
 *
-* V 1.00 Plugin released!
+* V 1.00 
+*    - Plugin released!
 *
 *------------------------------------------------------------------------------
 * END OF THE HELP FILE
@@ -623,22 +812,40 @@
 * @desc Choose a name for this category.
 * @default Battle
 *
-* @param Trophy
-* @desc Setup this category's trophy with the parameters below.
-* @default --------
+* @param Cat Background
+* @type file
+* @dir img/achievements
+* @required 1
+* @desc The background image for this category.
+* @default
 *
-* @param Description
+* @param Trophy
+* @default ----------
+*
+* @param Hide Trophy
+* @parent Trophy
+* @type boolean
+* @desc If ON, this trophy won't appear on the menu, but the player can still unlock it.
+* @default false
+*
+* @param Trophy Description
 * @parent Trophy
 * @type note
 * @desc Write a description for this category's trophy.
 * @default "This is a description."
 *
-* @param Image
+* @param Trophy Image
 * @parent Trophy
 * @type file
 * @dir img/achievements
 * @require 1
 * @desc Choose an image to represent this trophy.
+* @default
+*
+* @param On Unlock
+* @parent Trophy
+* @type note
+* @desc This script will be called once this trophy is unlocked.
 * @default
 *
 */
@@ -677,6 +884,13 @@
 * @dir img/achievements
 * @require 1
 * @desc Choose an image to serve as background for this achievement.
+* @default
+*
+* @param Pop Up Image
+* @type file
+* @dir img/achievements
+* @require 1
+* @desc This image will be the pop up's background when this achievement is unlocked.
 * @default
 *
 * @param Requirements
@@ -765,9 +979,8 @@
 * value and the required one.
 * @default ≥
 *
-* @param Value
-* @desc Define a value to be compared and so unlock (or not)
-* the achievement.
+* @param Required Value
+* @desc This is the value required to unlock this achievement.
 * @default 1
 *
 * @param Alias
@@ -886,14 +1099,10 @@
 * @desc This text will be shown when selecting a locked data.
 * @default LOCKED
 *
-* @param Unlocked
-* @desc This text is shown on the pop up window, right before the achievement's name.
-* @default Unlocked:
-*
-* @param Unlocked In
+* @param Unlocked On
 * @desc Shown on the info window when the selected achievement is
-* unlocked. \date is replaced by the time it was completed.
-* @default Unlocked in \date at \time
+* unlocked. Learn more about it on the Help section.
+* @default Unlocked on <date> at <time>
 *
 * @param Secret Sign
 * @desc This text will replace the achievement's name in case it's secret.
@@ -902,7 +1111,7 @@
 * @param Secret Achiev
 * @type note
 * @desc This text will be shown when selecting a secret achievement.
-* @default "This is a secret achievement. \nIt'll be revealed once it's requirements are met."
+* @default "This is a secret achievement. It'll be revealed once it's requirements are met."
 *
 * @param Trophies Description
 * @type note
@@ -943,8 +1152,8 @@
 */
 var Imported = Imported || {};
 var SMO = SMO || {};
-Imported.SMO_Achievements = true;
 SMO.AM = {};
+Imported.SMO_Achievements = true;
 
 //===============================================================================================
 // Basics
@@ -964,6 +1173,19 @@ if (!Array.prototype.delete){
 	}
 }
 
+if (!Array.prototype.deleteAll){
+	Array.prototype.deleteAll = function(value){
+		if (value) {
+			while (this.contains(value)){
+				this.splice(this.indexOf(value), 1);
+			}
+		} else {
+			this.splice(0, this.length);
+		}
+		return this;
+	}
+}
+
 Number.toNatural = function(n){
 	return n > 0 ? Math.round(n) : 0;
 }
@@ -972,20 +1194,18 @@ Bitmap.prototype.drawTriangleS = function(x, y, base, height, direction, color){
 	var p1, p2, p3;
 	base = base || 6;
 	height = height || 4;
-	if (direction === 'left'){
-		p1 = {x:x - height, y:y}; 
+	switch(direction){
+	case 'left':
+		p1 = {x:x - height, y:y};
+	case 'right':
+		p1 = p1 || {x:x + height, y:y};
 		p2 = {x:x, y:y - base/2};
 		p3 = {x:x, y:y + base/2};
-	} else if (direction === 'right'){
-		p1 = {x:x + height, y:y};
-		p2 = {x:x, y:y - base/2};
-		p3 = {x:x, y:y + base/2};
-	} else if (direction === 'up'){
+		break;
+	case 'up':
 		p1 = {x:x, y:y - height};
-		p2 = {x:x - base/2, y:y};
-		p3 = {x:x + base/2, y:y};
-	} else {
-		p1 = {x:x, y:y + height};
+	default:
+		p1 = p1 || {x:x, y:y + height};
 		p2 = {x:x - base/2, y:y};
 		p3 = {x:x + base/2, y:y};
 	}
@@ -1002,23 +1222,79 @@ Bitmap.prototype.drawTriangleS = function(x, y, base, height, direction, color){
 	this._setDirty();
 }
 
+Bitmap.prototype.drawHalfCircleS = function(x, y, radius, color, side){
+	var sides = ['down', 'left', 'up', 'right'];
+	var index = sides.indexOf(side) > -1 ? sides.indexOf(side) : 0;
+	var startAngle = Math.PI * index/2;
+	var endAngle = startAngle + Math.PI;
+	var context = this._context;
+	context.save();
+	context.fillStyle = color;
+	context.beginPath();
+	context.arc(x, y, radius, startAngle, endAngle, false);
+	context.fill();
+	context.restore();
+	this._setDirty();
+}
+
 Bitmap.prototype.drawRectS = function(x, y, width, height, borderSize, borderColor, backColor, backImg){
-	backColor = backColor || 'rgba(0,0,0,0.6)';
-	borderColor = borderColor || '#FFFFFF';
-	borderSize = borderSize || 1;
+	borderSize = borderSize || 0;
 
 	//Drawing borders
-	this.fillRect(x, y, borderSize, height, borderColor);//left
-	this.fillRect(x + width - borderSize, y, borderSize, height, borderColor);//right
-	this.fillRect(x + borderSize, y, width - borderSize * 2, borderSize, borderColor);//top
-	this.fillRect(x + borderSize, y + height - borderSize, width - borderSize * 2, borderSize, borderColor);//bottom
+	if (borderSize > 0){
+		borderColor = borderColor || '#FFFFFF';
+		this.fillRect(x, y, borderSize, height, borderColor);//left
+		this.fillRect(x + width - borderSize, y, borderSize, height, borderColor);//right
+		this.fillRect(x + borderSize, y, width - borderSize * 2, borderSize, borderColor);//top
+		this.fillRect(x + borderSize, y + height - borderSize, width - borderSize * 2, borderSize, borderColor);//bottom
+	}
 
 	//Drawing background
 	if (backImg){
 		var bitmap = ImageManager.loadAchievement(backImg);
 		this.blt(bitmap, 0, 0, bitmap.width, bitmap.height, x + borderSize, y + borderSize, width - borderSize * 2, height - borderSize * 2);
 	} else {
+		backColor = backColor || 'rgba(0,0,0,0.6)';
 		this.fillRect(x + borderSize, y + borderSize, width - borderSize * 2, height - borderSize * 2, backColor);
+	}
+}
+
+Bitmap.prototype.drawRectSR = function(x, y, width, height, borderSize, borderColor, backColor, backImg){
+	backColor = backColor || 'rgba(0,0,0,0.6)';
+	borderSize = borderSize || 0;
+	//The height cannot be odd
+	height = (height % 2 != 0) ? height + 1 : height;
+	//The width cannot be smaller than the height
+	width = Math.max(width, height);
+	//The bordersize cannot be bigger than half the height
+	borderSize = Math.min(borderSize, height/2);
+
+	//Drawing borders
+	if (borderSize > 0){
+		borderColor = borderColor || '#FFFFFF';
+		//Left border
+		this.drawHalfCircleS(x + height/2, y + height/2, height/2, borderColor, 'left');
+		this.drawHalfCircleS(x + height/2, y + height/2, height/2 - borderSize, backColor, 'left');
+		//Right border
+		this.drawHalfCircleS(x + width - height/2, y + height/2, height/2, borderColor, 'right');
+		this.drawHalfCircleS(x + width - height/2, y + height/2, height/2 - borderSize, backColor, 'right');
+		//Top border
+		this.fillRect(x + height/2, y, width - height, borderSize, borderColor);
+		//Bottom border
+		this.fillRect(x + height/2, y + height - borderSize, width - height, borderSize, borderColor);
+	} else {
+		//Left backgorund
+		this.drawHalfCircleS(x + height/2, y + height/2, height/2, backColor, 'left');
+		//Right backgorund
+		this.drawHalfCircleS(x + width - height/2, y + height/2, height/2, backColor, 'right');
+	}
+
+	//Drawing background (rectangle)
+	if (backImg){
+		var bitmap = ImageManager.loadAchievement(backImg);
+		this.blt(bitmap, 0, 0, bitmap.width, bitmap.height, x + borderSize, y + borderSize, width - borderSize * 2, height - borderSize * 2);
+	} else {
+		this.fillRect(x + height/2, y + borderSize, width - height, height - borderSize * 2, backColor);
 	}
 }
 
@@ -1028,96 +1304,143 @@ Bitmap.prototype.drawRectS = function(x, y, width, height, borderSize, borderCol
 SMO.getParams = PluginManager.parameters('SMO_Achievements');
 
 SMO.AM.isGlobalRange = String(SMO.getParams['Range']) === 'Global' ? true : false;
-SMO.AM.isGlobalRewards = SMO.AM.isGlobalRange && String(SMO.getParams['Global Rewards']) === 'true' ? true : false;
-SMO.AM.background = String(SMO.getParams['Menu Background']);
-SMO.AM.autoRefresh = eval(SMO.getParams['Auto Refresh']);
-SMO.AM.updateInterval = Number(SMO.getParams['Update Interval']);
-SMO.AM.onUnlockScript = SMO.getParams['On Unlock'] ? JSON.parse(SMO.getParams['On Unlock']) : '';
-SMO.AM.hideTotally = eval(SMO.getParams['Hide Totally']);
+if (SMO.AM.isGlobalRange && !Utils.isNwjs()){
+	SMO.AM.isGlobalRange = false;
+	console.warn('Global range does not work out of Node.js, the achievement\'s range was adjusted to "Local".');
+}
+SMO.AM.isGlobalRewards  = SMO.AM.isGlobalRange && String(SMO.getParams['Global Rewards']) === 'true' ? true : false;
+SMO.AM.background       = String(SMO.getParams['Menu Background']);
+SMO.AM.autoRefresh      = SMO.getParams['Auto Refresh'] === 'true' ? true : false;
+SMO.AM.updateInterval   = Number(SMO.getParams['Update Interval']);
+SMO.AM.onUnlockScript   = SMO.getParams['On Unlock'] ? JSON.parse(SMO.getParams['On Unlock']) : '';
+SMO.AM.hideTotally      = SMO.getParams['Hide Totally'] === 'true' ? true : false;
+SMO.AM.lockedBackground = SMO.getParams['Locked Achiev Background'];
+SMO.AM.secretBackground = SMO.getParams['Secret Achiev Background'];
 
 SMO.AM.TrophiesConfigs = {
-	enabled: eval(SMO.getParams['Use Trophies']),
-	lines: Number(SMO.getParams['Trophies Lines']),
-	cols: Number(SMO.getParams['Trophies Columns'])
+	enabled:     SMO.getParams['Use Trophies'] === 'true' ? true : false,
+	lines:       Number(SMO.getParams['Trophies Lines']),
+	cols:        Number(SMO.getParams['Trophies Columns']),
+	selectStyle: SMO.getParams['Trophy Selector'] === 'Grow' ? 'grow' : 'cursor'
 };
 
 SMO.AM.TitleCommand = {
-	active: eval(SMO.getParams['Title Command']),
-	name: String(SMO.getParams['Title Command Name']),
+	active:   SMO.getParams['Title Command'] === 'true' ? true : false,
+	name:     String(SMO.getParams['Title Command Name']),
 	position: Number(SMO.getParams['Title Command Position']),
 }
 
 //Pop Up
 SMO.AM.PopUp = {
-	state: eval(SMO.getParams['Pop Up Window']),
-	button: eval(SMO.getParams['Pop Up Button']),
-	x: String(SMO.getParams['Pop Up X']),
-	y: String(SMO.getParams['Pop Up Y']),
-	width: String(SMO.getParams['Pop Up Width']),
-	height: String(SMO.getParams['Pop Up Heigth'])
+	state:            SMO.getParams['Pop Up Window'] === 'true' ? true : false,
+	button:           SMO.getParams['Pop Up Button'] === 'true' ? true : false,
+	text:             SMO.getParams['Pop Up Text'] ? JSON.parse(SMO.getParams['Pop Up Text']) : '',
+	x:                String(SMO.getParams['Pop Up X']),
+	y:                String(SMO.getParams['Pop Up Y']),
+	width:            String(SMO.getParams['Pop Up Width']),
+	height:           String(SMO.getParams['Pop Up Heigth']),
+	borderColor:      SMO.getParams['Pop Up Borders'] || 'rgba(0,0,0,0)',
+	preselect:        0,
+	isClickTriggered: false
 };
 
 SMO.AM.getTexts = function(){
 	var texts = JSON.parse(SMO.getParams['Texts and Colors']);
 	SMO.AM.Texts = {
-		progress: String(texts['Progress']),
-		trophies: String(texts['Trophies']),
-		secretSign: String(texts['Secret Sign']),
-		menuName: String(texts['Menu Name']),
-		locked: texts['Locked'],
-		unlocked:String(texts['Unlocked']),
-		unlockedIn: texts['Unlocked In'],
+		progress:         String(texts['Progress']),
+		trophies:         String(texts['Trophies']),
+		secretSign:       String(texts['Secret Sign']),
+		menuName:         String(texts['Menu Name']),
+		locked:           String(texts['Locked']),
+		unlockedOn:       texts['Unlocked In'] || String(texts['Unlocked On']),//unlocked in -> for previous versions
 		secretAchievDesc: texts['Secret Achiev'] ? JSON.parse(texts['Secret Achiev']) : '',
-		trophiesDesc: texts['Trophies Description'] ? JSON.parse(texts['Trophies Description']) : '',
-		none: String(texts['None']),
-		requirements: String(texts['Requirements']),
-		rewards:String(texts['Rewards']),
-		unlockedColor: String(texts['Unlocked Color']) || '#00FF00',
-		selectorColor: String(texts['Selector Color']) || '#FF9900',
-		gaugeColor1: String(texts['Gauge Color 1']) || 'rgba(20,255,20,1)',
-		gaugeColor2: String(texts['Gauge Color 2']) || 'rgba(100,255,100,1)'
+		trophiesDesc:     texts['Trophies Description'] ? JSON.parse(texts['Trophies Description']) : '',
+		none:             String(texts['None']),
+		requirements:     String(texts['Requirements']),
+		rewards:          String(texts['Rewards']),
+		unlockedColor:    String(texts['Unlocked Color']) || 'rgba(0,0,0,0)',
+		selectorColor:    String(texts['Selector Color']) || 'rgba(0,0,0,0)',
+		gaugeColor1:      String(texts['Gauge Color 1']) || 'rgba(0,0,0,0)',
+		gaugeColor2:      String(texts['Gauge Color 2']) || 'rgba(0,0,0,0)'
 	}
 }
 SMO.AM.getTexts();
 
 //Default Icons
 SMO.AM.Icons = {
-	locked: SMO.getParams['Locked Icon'] ? Number(SMO.getParams['Locked Icon']) : -1,
-	unlocked: SMO.getParams['Unlocked Icon'] ? Number(SMO.getParams['Unlocked Icon']) : -1,
-	secret: SMO.getParams['Secret Icon'] ? Number(SMO.getParams['Secret Icon']) : -1,
-	gold: SMO.getParams['Gold Icon'] ? Number(SMO.getParams['Gold Icon']) : -1,
+	locked:       SMO.getParams['Locked Icon'] ? Number(SMO.getParams['Locked Icon']) : -1,
+	unlocked:     SMO.getParams['Unlocked Icon'] ? Number(SMO.getParams['Unlocked Icon']) : -1,
+	secret:       SMO.getParams['Secret Icon'] ? Number(SMO.getParams['Secret Icon']) : -1,
+	gold:         SMO.getParams['Gold Icon'] ? Number(SMO.getParams['Gold Icon']) : -1,
 	recentUnlock: SMO.getParams['Recent Unlock'] ? Number(SMO.getParams['Recent Unlock']) : -1
 };
 
 //Menu Command
 SMO.AM.MenuCommand = {
-	active: eval(SMO.getParams['Menu Command']),
+	active:   SMO.getParams['Menu Command'] === 'true' ? true : false,
 	switchId: Number(SMO.getParams['Show Command Switch']),
 	position: Number(SMO.getParams['Command Position'])
 };
 
+//Refresh categories if any of them have a custom img
+SMO.AM._categoryRefreshed = true;
+
+//Images to be loaded before opening the achievements menu
 SMO.AM.achievsBackgrounds = [];
+
+if (SMO.AM.lockedBackground){
+	SMO.AM.achievsBackgrounds.push(SMO.AM.lockedBackground);
+}
+
+if (SMO.AM.secretBackground){
+	SMO.AM.achievsBackgrounds.push(SMO.AM.secretBackground);
+}
 
 SMO.AM.categories = [];
 SMO.AM.getCategories = function(){
-	var data;
+	var data, image, needUpdate;
 	var cat = SMO.getParams['Categories And Trophies'] ? JSON.parse(SMO.getParams['Categories And Trophies']) : [];
 	SMO.AM.Categories = [];
 	cat.forEach(function(c){
 		data = JSON.parse(c);
 		SMO.AM.Categories.push({
-			description:data.Description ? JSON.parse(data.Description) : '',
-			image:data.Image,
-			name:data['Category Name']
+			img: data['Cat Background'],
+			name: data['Category Name'],
+			Trophy: {
+				img: data['Image'] || data['Trophy Image'],
+				description: data['Trophy Description'] ? JSON.parse(data['Trophy Description']) : '',
+				hidden: data['Hide Trophy'] === 'true' ? true : false,
+				onUnlock: data['On Unlock'] ? JSON.parse(data['On Unlock']) : ''
+			}
 		});
-		if (data.Image && !SMO.AM.achievsBackgrounds.contains(data.Image)){
-			SMO.AM.achievsBackgrounds.push(data.Image);
+
+		//Adding the category's image to the load list
+		image = SMO.AM.Categories.last().img;
+		if (image){
+			SMO.AM.achievsBackgrounds.delete(image);
+			SMO.AM.achievsBackgrounds.push(image);
+			SMO.AM._categoryRefreshed = false;
+		}
+
+		//Adding the trophy's image to the load list
+		image = SMO.AM.Categories.last().Trophy.img;
+		if (image){
+			SMO.AM.achievsBackgrounds.delete(image);
+			SMO.AM.achievsBackgrounds.push(image);
 		}
 		SMO.AM.categories.push(data['Category Name']);
 	});
 }
 SMO.AM.getCategories();
-SMO.AM.categories.delete('none');
+if (SMO.AM.Categories.length > 99){
+	SMO.AM.Categories.splice(99, SMO.AM.Categories.length - 99);
+	SMO.AM.categories.splice(99, SMO.AM.categories.length - 99);
+	console.warn('The categories are hard capped at 99 members. Extra categories removed.');
+}
+if (SMO.AM.categories.contains('none')){
+	SMO.AM.categories.deleteAll('none');
+	console.warn('The category name "none" is reserved, please try giving it another name.');
+}
 
 //Sort Options
 SMO.AM.Sort = {
@@ -1141,6 +1464,10 @@ SMO.AM.getSortOptions = function(){
 	})
 }
 SMO.AM.getSortOptions();
+
+//Test Window - the window used to measure texts for sprites
+//Check SMO.AM.textWidthEx
+SMO.AM.TestWindow = null;
 //===============================================================================================
 // Achievement Data Object
 //===============================================================================================
@@ -1161,6 +1488,7 @@ Achievement_Data.prototype.initialize = function(id, data){
 	this.icon.unlocked = data['Unlocked Icon'] ? Number(data['Unlocked Icon']) : -2;
 	this.icon.secret = data['Secret Icon'] ? Number(data['Secret Icon']) : -2;
 	this.backgroundImage = data['Background Image'];
+	this.popUpImage = data['Pop Up Image'] || '';
 	this.setupVisibility(data['Visibility']);
 	this.Name = data.Name;
 	this.name = this.visibility === 'secret' ? SMO.AM.Texts.secretSign : this.Name;
@@ -1170,19 +1498,21 @@ Achievement_Data.prototype.initialize = function(id, data){
 		SMO.AM.achievsBackgrounds.delete(this.backgroundImage);
 		SMO.AM.achievsBackgrounds.push(this.backgroundImage);
 	}
+	this._isAchievement = true;
 }
 
 Achievement_Data.prototype.setupRequirements = function(data){
 	this.requirements = [];
 	var req, type, itemId, comparison, value;
 	var requirements = data['Requirements'] ? JSON.parse(data['Requirements']) : null;
+	var isPlaytime = false;
 	if (requirements){
 		requirements.forEach(function(r){
 			req = JSON.parse(r);
 			type = req.Type.toLowerCase();
 			itemId = Number(req['Item ID']);
 			comparison = this.getProperComparison(req.Comparison);
-			value = Number(req.Value);
+			value = req.Value ? Number(req.Value) : Number(req['Required Value']);
 			alias = String(req.Alias);
 			aliasIcon = req['Alias Icon'] ? Number(req['Alias Icon']) : -1;
 			currentValue = req['Current Value'] ? JSON.parse(req['Current Value']) : '';
@@ -1197,7 +1527,11 @@ Achievement_Data.prototype.setupRequirements = function(data){
 				currentValue: currentValue,
 				finalValue: finalValue
 			});
+			if (type === 'playtime'){
+				isPlaytime = true;
+			}
 		}, this);
+		this._playtimeRequired = isPlaytime;
 	}
 }
 
@@ -1216,6 +1550,10 @@ Achievement_Data.prototype.getProperComparison = function(sign){
 	case '≠':
 		return '!=';
 	}
+}
+
+Achievement_Data.prototype.isPlaytimeRequired = function(){
+	return this._playtimeRequired && !this.isUnlocked();
 }
 
 Achievement_Data.prototype.setupRewards = function(data){
@@ -1254,8 +1592,8 @@ Achievement_Data.prototype.unlock = function(){
 		scene._achievementPopUp.show();
 	}
 	Window_Achievements.prototype.refreshUnlockedTrophies.call(this, true);
-	if (scene._trophiesWindow && scene._trophiesWindow.visible){
-		scene._trophiesWindow.refresh();
+	if (scene instanceof Scene_Achievements){
+		scene.refreshAll();
 	}
 }
 
@@ -1277,6 +1615,10 @@ Achievement_Data.prototype.lock = function(){
 		}
 		if (SMO.AM.isGlobalRange){
 			SMO.AM.saveGlobalAchievements();
+		}
+		var scene = SceneManager._scene;
+		if (scene instanceof Scene_Achievements){
+			scene.refreshAll();
 		}
 	}
 }
@@ -1327,31 +1669,43 @@ Achievement_Data.prototype.isSecret = function(){
 	return this.visibility === 'secret' && !this.isUnlocked();
 }
 
-Achievement_Data.prototype.getUnlockDate = function(){
-	var date = '';
+Achievement_Data.prototype.getUnlockDateString = function(){
+	var str = '';
 	if (this.isUnlocked()){
 		var index = SMO.AM.Achievements().achievs.unlocked.indexOf(this.id);
-		date = SMO.AM.Achievements().achievs.unlockDate[index].str;
+		var date = SMO.AM.Achievements().achievs.unlockDate[index];
+		str = SMO.AM.Texts.unlockedOn;
+		for (var d in date){
+			var regex = new RegExp('<' + d.toLowerCase() + '>', "i");
+			str = str.replace(regex, date[d]);
+		}
 	}
-	return date;
+	return str;
 }
 
-Achievement_Data.prototype.getUnlockDateValue = function(){
+Achievement_Data.prototype.getUnlockDateNow = function(){
 	var value = null;
 	if (this.isUnlocked()){
 		var index = SMO.AM.Achievements().achievs.unlocked.indexOf(this.id);
-		var value = SMO.AM.Achievements().achievs.unlockDate[index].value;
+		var value = SMO.AM.Achievements().achievs.unlockDate[index].now;
 	}
 	return value;
 }
 
-Achievement_Data.prototype.isImageReady = function(){
-	var bitmap;
+Achievement_Data.prototype.isMyBackgroundReady = function(){
 	if (this.backgroundImage) {
-		bitmap = ImageManager.loadAchievement(this.backgroundImage);
+		var bitmap = ImageManager.loadAchievement(this.backgroundImage);
 		return bitmap.isReady();
 	}
 	return true;
+}
+
+Achievement_Data.prototype.isMyPopUpReady = function(){
+	if (this.popUpImage) {
+		var bitmap = ImageManager.loadAchievement(this.popUpImage);
+		return bitmap.isReady();
+	}
+	return this.isMyBackgroundReady();
 }
 
 //===============================================================================================
@@ -1376,10 +1730,8 @@ SMO.AM.getData = function(){
 SMO.AM.getData();
 
 SMO.AM.toUnlock = [];
+SMO.AM.toDelete = [];
 SMO.AM.currentCategory = 'none';
-SMO.AM.PopUp.preselect = 0;
-SMO.AM.PopUp.isClickTriggered = false;
-SMO.AM.deleteAchievement = [];
 SMO.AM.FrameCount = {
 	lastValue:0,
 	value:0
@@ -1395,63 +1747,17 @@ SMO.AM.playtime = function(){
 
 //Comparing 2 achievs to see which one was unlocked first
 SMO.AM.compareAchievsDates = function(achiev1, achiev2){
-	var v1 = achiev1.getUnlockDateValue();
-	var v2 = achiev2.getUnlockDateValue();
+	var v1 = achiev1.getUnlockDateNow();
+	var v2 = achiev2.getUnlockDateNow();
 	if (!v1 || !v2) return 0;
 	if (v1 === v2) return 0;
 
 	return v1 < v2 ? 1 : -1;
 }
 
-SMO.AM.wrapText = function(text, maxWidth, fontSize, lineHeight){
-	var newText = '';
-	if (text && maxWidth > 0){
-		var line, lineWidth, newLineWidth;
-
-		//Creating a window to measure the text's width
-		var TestWindow = new Window_Base(0, 0, maxWidth, 10);
-		fontSize = fontSize || TestWindow.contents.fontSize;
-		lineHeight = lineHeight || TestWindow.lineHeight();
-		TestWindow.contents.fontSize = fontSize;
-		TestWindow.lineHeight = function(){
-			return lineHeight;
-		}
-
-		var lines = text.split('\n');
-		var remaining = '';
-		for (var l = 0; l < lines.length || remaining != ''; l++){
-			line = lines[l] ? remaining + lines[l] : remaining;
-			lineWidth = TestWindow.textWidth(line);
-			if (lineWidth > maxWidth){
-				newLineWidth = lineWidth;
-				newLine = line.split(' ');
-				remaining = '';
-				while (newLineWidth > maxWidth){
-					if (newLine.length > 1){
-						remaining = newLine.last() + ' ' + remaining;
-						newLine.splice(newLine.length - 1, 1);
-						newLineWidth = TestWindow.textWidth(SMO.AM.uniteArrayWithStrings(newLine, ' '));
-					} else {
-						newLineWidth = 0;
-						remaining = '';
-					}
-				}
-				newLine = SMO.AM.uniteArrayWithStrings(newLine, ' ');
-			} else {
-				remaining = '';
-				newLine = line;
-			}
-			newText += newLine + '\n';
-		}
-		var lastBreak = newText.lastIndexOf('\n');
-		newText = newText.substr(0, lastBreak);
-	}
-	return newText;
-}
-
 SMO.AM.uniteArrayWithStrings = function(array, between){
+	var union = '';
 	if (Object.prototype.toString.call(array) === '[object Array]'){
-		var union = '';
 		for (var a = 0; a < array.length; a++){
 			union += array[a];
 			if (between && a + 1 < array.length){
@@ -1462,9 +1768,159 @@ SMO.AM.uniteArrayWithStrings = function(array, between){
 	return union;
 }
 
-if (SMO.AM.isGlobalRange && !Utils.isNwjs()){
-	SMO.AM.isGlobalRange = false;
-	console.warn('Global achievements do not work out of Node.js, the achievement\'s range was adjusted to "Local".');
+SMO.getTextColor = function(n) {;
+	var bitmap = new Bitmap(1,1);
+	bitmap = ImageManager.loadSystem('Window');
+	var px = 96 + (n % 8) * 12 + 6;
+	var py = 144 + Math.floor(n / 8) * 12 + 6;
+	return bitmap.getPixel(px, py);
+}
+
+SMO.getDate = function(){
+	var arr = new Date().toString().split(' ');
+
+	var months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'September', 
+		'October', 'November', 'December'];
+	var month = new Date().getMonth();
+	var monthName = months[month++];
+	month = month < 10 ? '0' + month : String(month);
+
+	var days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+	var today = days[new Date().getDay()];
+	var dayA = arr[2].length < 2 ? '0' + arr[2] : arr[2];
+
+	var hours = arr[4].split(':');
+	var hourA = hours[0].length < 2 ? '0' + hours[0] : hours[0]; 
+	var hourB = Math.max(0, Number(hours[0]) - 12);
+	var hourB = hourB < 10 ? '0' + hourB : String(hourB);
+	var phase = Number(hours[0]) >= 12 ? 'PM' : 'AM';
+	var min = hours[1].length < 2 ? '0' + hours[1] : hours[1];
+	var sec = hours[2].length < 2 ? '0' + hours[2] : hours[2];
+
+	var Data = {
+		hour:   hourA,
+		hourA:  hourA,       //hour (24h)
+		hourB:  hourB,       //hour (AM/PM)
+		phase:  phase,       //AM or PM
+		min:    min,         //min
+		sec:    sec,         //sec
+		day:    dayA,
+		dayA:   dayA,        //day (number)
+		dayB:   today,       //day of the week
+		dayC:   arr[0],      //day of the week (ab)
+		month:  month,
+		monthA: month,       //month (number)
+		monthB: monthName,   //month name
+		monthC: arr[1],      //month name (ab)
+		year:   arr[3],      //number
+		now:    Date.now()   //date now
+	};
+	Data.date = dayA + '/' + month + '/' + arr[3];
+	Data.time = hourA + ':' + min + ':' + sec;
+	return Data;
+}
+
+SMO.AM.textStateHeight = function(textState, fontSize, all){
+	if (!this.TestWindow){
+		this.TestWindow = new Window_Base();
+		this.TestWindow.resetFontSettings = function() {};
+	}
+	fontSize = fontSize || 28;
+	this.TestWindow.contents.fontSize = fontSize;
+
+	return this.TestWindow.calcTextHeight(textState, all);
+}
+
+SMO.AM.textWidthEx = function (text, fontSize, easy, fontRate, keepFont) {
+	if (!text) return 0;
+	if (Object.prototype.toString.call(text) === '[object Number]'){
+		text = text.toString();
+	} else if (Object.prototype.toString.call(text) !== '[object String]') {
+		return 0;
+	}
+
+	if (!this.TestWindow){
+		this.TestWindow = new Window_Base();
+		this.TestWindow.resetFontSettings = function() {};
+	}
+
+	fontRate = fontRate > 0 ? fontRate : 12;
+	this.TestWindow.makeFontBigger = function(){
+		if (this.contents.fontSize <= 96) {
+			this.contents.fontSize += fontRate;
+		}
+	}
+	this.TestWindow.makeFontSmaller = function(){
+		if (this.contents.fontSize >= 24) {
+			this.contents.fontSize -= fontRate;
+		}
+	}
+	if (!keepFont){
+		this.TestWindow.contents.fontSize = fontSize > 4 ? fontSize : 28;
+	}
+
+	if (easy){ // for simple texts
+		return Math.ceil(this.TestWindow.textWidth(text));
+	} else {   // for texts using codes (E.G: \c[x])
+		var lines = text.split('\n');
+		var textWidth = this.TestWindow.textWidthEx(lines[0]);
+		for (var i = 1; i < lines.length; i++) {
+			if (this.TestWindow.textWidthEx(lines[i]) > textWidth) {
+				textWidth = this.TestWindow.textWidthEx(lines[i]);
+			}
+		}
+		return Math.ceil(textWidth);
+	}
+}
+
+SMO.AM.removeTextCodes = function(text){
+	if (text){
+		text = text.replace(/\\v\[.?.?.?.?\]/gi, '');
+		text = text.replace(/\\n\[.?.?.?.?\]/gi, '');
+		text = text.replace(/\\p\[.?.?.?.?\]/gi, '');
+		text = text.replace(/\\g/gi, '');
+		text = text.replace(/\\c\[.?.?\]/gi, '');
+		text = text.replace(/\\i\[.?.?.?.?\]/gi, '');
+		text = text.replace(/\\{/g, '');
+		text = text.replace(/\\}/g, '');
+	}
+	return text;
+}
+
+SMO.AM.wrapText = function(text, maxWidth, fontSize, easy){
+	var newText = [];
+	if (text && maxWidth > 0){
+		var line, lineWidth, newLineWidth, unitedTxt;
+		var lines = text.split('\n');
+		var remaining = '';
+		for (var l = 0; l < lines.length || remaining != ''; l++){
+			line = lines[l] ? remaining + lines[l] : remaining;
+			lineWidth = SMO.AM.textWidthEx(line, fontSize, easy);
+			if (lineWidth > maxWidth){
+				newLineWidth = lineWidth;
+				newLine = line.split(' ');
+				remaining = '';
+				while (newLineWidth > maxWidth){
+					if (newLine.length > 1){
+						remaining = newLine.last() + ' ' + remaining;
+						newLine.splice(newLine.length - 1, 1);
+						unitedTxt = SMO.AM.uniteArrayWithStrings(newLine, ' ');
+						newLineWidth = SMO.AM.textWidthEx(unitedTxt, fontSize, easy);
+					} else {
+						newLineWidth = 0;
+						remaining = '';
+					}
+				}
+				newLine = SMO.AM.uniteArrayWithStrings(newLine, ' ');
+			} else {
+				remaining = '';
+				newLine = line;
+			}
+			newText.push(newLine);
+		}
+		newText = SMO.AM.uniteArrayWithStrings(newText, '\n');
+	}
+	return newText;
 }
 
 SMO.AM.setupAchievements = function(){
@@ -1584,6 +2040,10 @@ SMO.AM.showAchievements = function(category){
 
 //Refresh all achievements
 SMO.AM.refreshAchievements = function(){
+	if ($gamePlayer && $gamePlayer._transferring){
+		return;
+	}
+
 	var scene = SceneManager._scene;
 
 	//creating the game system obj
@@ -1596,14 +2056,15 @@ SMO.AM.refreshAchievements = function(){
 		SMO.AM.tryUnlockingAchievement(SMO.AM.Achievements().achievs.locked[d])
 	}
 
-	if (SMO.AM.deleteAchievement.length > 0){
-		SMO.AM.deleteAchievement.forEach(function(d){
+	if (SMO.AM.toDelete.length > 0){
+		SMO.AM.toDelete.forEach(function(d){
 			SMO.AM.Data.delete(d);
 		});
-		SMO.AM.deleteAchievement = [];
+		SMO.AM.toDelete = [];
 	}
 
-	if (SMO.AM.toUnlock.length > 0){
+	var isUnlock = SMO.AM.toUnlock.length > 0;
+	if (isUnlock){
 		SMO.AM.toUnlock.forEach(function(a){
 			SMO.AM.unlockAchievement(a);
 		});
@@ -1628,7 +2089,7 @@ SMO.AM.refreshAchievements = function(){
 	SMO.AM.toUnlock = [];
 
 	if (scene instanceof Scene_Achievements){
-		scene.refreshAll();
+		scene.refreshMin(isUnlock);
 	}
 }
 
@@ -1721,9 +2182,8 @@ SMO.AM.resetAchievementsData = function(){
 }
 
 SMO.AM.addNewUnlockedDate = function(){
-	var str = new Date().toLocaleString();
-	var value = Date.now();
-	SMO.AM.Achievements().achievs.unlockDate.push({ str:str, value:value });	
+	var Data = SMO.getDate();
+	SMO.AM.Achievements().achievs.unlockDate.push(Data);	
 }
 
 SMO.AM.evalRequirements = function(achievement){
@@ -1750,13 +2210,14 @@ SMO.AM.getRequirementValues = function(requirement, achievement){
 		name = 'Custom';
 		try {
 			currentValue = eval(requirement.currentValue);
-			finalValue = eval(requirement.finalValue);
+			finalValue = requirement.finalValue ? eval(requirement.finalValue) : value;
 		} catch(e){
 			currentValue = 0;
 			finalValue = 1;
 			console.error('Error on Advanced Requirement! (Achievement: '+achievement.Name+' (ID: '+achievement.id+'))');
 			console.error(e);
 		}
+		break;
 	case 'switch':
 		name = $dataSystem ? $dataSystem.switches[itemId] : '';
 		currentValue = $gameSwitches.value(itemId);
@@ -1893,6 +2354,17 @@ Scene_Load.prototype.reloadMapIfUpdated = function(){
 }
 
 //===============================================================================================
+// Game Player
+// Refreshing achievements after transfer
+//===============================================================================================
+SMO.AM._GamePlayer_clearTransferInfo = Game_Player.prototype.clearTransferInfo;
+Game_Player.prototype.clearTransferInfo = function(){
+	SMO.AM._GamePlayer_clearTransferInfo.call(this);
+	SceneManager._scene._achieveCounter = 0;
+	SMO.AM.refreshAchievements();
+}
+
+//===============================================================================================
 // Game System
 //===============================================================================================
 Game_System.prototype.setupAchievs = function(){
@@ -1968,20 +2440,6 @@ Game_System.prototype.lockedAchievsCount = function(){
 //===============================================================================================
 // Window Base
 //===============================================================================================
-Window_Base.prototype.calcTextWidth = function (text) {
-	if (!text || text instanceof Array) return;
-	text = text.toString();
-	var texts = text.split('\n');
-	var textWidth = this.textWidthEx(texts[0]);
-	for (var i = 1; i < texts.length; i++) {
-		if (this.textWidthEx(texts[i]) > textWidth) {
-			textWidth = this.textWidthEx(texts[i]);
-		}
-	}
-	textWidth = Math.ceil(textWidth) + 2 * this.standardPadding() + 8;
-	return textWidth;
-}
-
 Window_Base.prototype.textWidthEx = function(text) {
    	return this.drawTextEx(text, 0, this.contents.height);
 };
@@ -2011,10 +2469,9 @@ Scene_Base.prototype.updateFrameS = function(){
 Scene_Base.prototype.updateAchievements = function(){
 	if (this instanceof Scene_Boot) return;
 	if (this instanceof Scene_Title && !SMO.AM.isGlobalRange) return;
-	var volume;
 
 	if (SMO.AM.PopUp.state && !this._achievementPopUp){
-		this.createAchievementPopUp();
+		this.createAchievementsPopUp();
 	}
 
 	if (SMO.AM.autoRefresh){
@@ -2027,7 +2484,7 @@ Scene_Base.prototype.updateAchievements = function(){
 	}
 }
 
-Scene_Base.prototype.createAchievementPopUp = function(){
+Scene_Base.prototype.createAchievementsPopUp = function(){
 	this._achievementPopUp = new Achievement_PopUp();
 	this.addChild(this._achievementPopUp);
 }
@@ -2143,13 +2600,14 @@ Achievement_PopUp.prototype.onClick = function(){
 }
 
 Achievement_PopUp.prototype.show = function(fadeRate){
+	if (this._isShowing) return;
 	this._queue = $gameSystem.achievPopUp.queue || [];
 	if (this._queue.length > 0){
 		var achievement = SMO.AM.Data[this._queue[0] - 1] || null;
 		if (achievement){
 			fadeRate = fadeRate || 5;
-			this.drawAchievementPopUp();
-			if (achievement.isImageReady()){
+			if (achievement.isMyPopUpReady()){
+				this.drawAchievementPopUp();
 				this._isShowing = true;
 				$gameSystem.achievPopUp.isShowing = true;
 				this.fade(fadeRate, this._timerX);//fade in
@@ -2179,23 +2637,46 @@ Achievement_PopUp.prototype.hide = function(){
 }
 
 Achievement_PopUp.prototype.drawAchievementPopUp = function(){
-	var item, bitmap, imgWidth;
-	width = this.bitmap.width;
-	height = this.bitmap.height;
 	if (this._queue.length > 0){
-		item = SMO.AM.Data[this._queue[0] - 1];
+		var item = SMO.AM.Data[this._queue[0] - 1];
 		this.bitmap.clear();
 		if (item){
-			//Drawing background
-			this.bitmap.drawRectS(0, 0, width, height, 2, SMO.AM.Texts.unlockedColor, 'rgba(0,0,0,0.8)', item.backgroundImage);
+			var width = this.bitmap.width;
+			var height = this.bitmap.height;
+			var popUpImg = item.popUpImage || item.backgroundImage;
 
-			//Drawing texts
-			this.changeTextColor(SMO.AM.Texts.unlockedColor);
-			this.drawText(SMO.AM.Texts.unlocked, 6, 5, this.width - 10, 'center');
-			this.changeTextColor('#FFFFFF');
-			this.drawText(item.Name, 6, 8 + this.lineHeight(), this.width - 10, 'center');
+			//Drawing background
+			this.bitmap.drawRectS(0, 0, width, height, 2, SMO.AM.PopUp.borderColor, 'rgba(20,20,20,0.8)', popUpImg);
+
+			//Drawing text
+			if (SMO.AM.PopUp.text){
+				var text = this.convertPopUpTextCodes(SMO.AM.PopUp.text, item);
+				this.drawTextEx(text, 6, 5);
+			}
 		}
 	}
+}
+
+Achievement_PopUp.prototype.convertPopUpTextCodes = function(text, Achievement){
+	if (!text) return '';
+	if (!Achievement) return text;
+	var iconIndex = Achievement.icon.unlocked > -2 ? Achievement.icon.unlocked : SMO.AM.Icons.unlocked;
+	var regExp = /<AchievCategory:.?.?>/gi;
+	var results = text.match(regExp);
+	if (results){
+		var categories = Achievement.category.split(',');
+		results.forEach(function(r){
+			var indexStart = '<AchievCategory:>'.length - 1;
+			var indexEnd = r.length - 1;
+			var catId = Number(r.substr(indexStart, indexEnd - indexStart)) || 0;
+			var category = categories[catId - 1] || '';
+			text = text.replace(r, category);
+		})
+	}
+	text = text.replace(/<achievname>/gi, Achievement.Name);
+	text = text.replace(/<achievid>/gi, Achievement.id);
+	text = text.replace(/<achievicon>/gi, '\\i[' + iconIndex + ']');
+	return text;
 }
 
 Achievement_PopUp.prototype.changeTextColor = function(color) {
@@ -2212,11 +2693,162 @@ Achievement_PopUp.prototype.standardFontSize = function(){
 	return 18;
 }
 
-Achievement_PopUp.prototype.drawText = function(text, x, y, maxWidth, align){
+Achievement_PopUp.prototype.standardFontFace = function(){
+	return Window_Base.prototype.standardFontFace.call(this);
+}
+
+Achievement_PopUp.prototype.drawText = function(text, x, y, maxWidth, maxHeight, align){
 	if (this.bitmap){
-		this.bitmap.drawText(text, x, y, maxWidth, this.lineHeight(), align);
+		this.bitmap.drawText(text, x, y, maxWidth, maxHeight, align);
 	}
 }
+
+Achievement_PopUp.prototype.drawTextEx = function(text, x, y){
+	if (this.bitmap){
+		if (text) {
+			var lines = text.split('\n');
+			var xOffSet = [];
+			var lineSize = 0;
+			var keepFont = false;
+			this.resetFontSettings();
+			//Calculating the align offset
+			for (var l = 0; l < lines.length; l++){
+				var lowerCaseLine = lines[l].toLowerCase();
+				if (lowerCaseLine.indexOf('<center>') > -1){
+					lineSize = SMO.AM.textWidthEx(lines[l].replace(/<center>/i, ''), this.bitmap.fontSize, false, 4, keepFont);
+					keepFont = true;
+					xOffSet.push(Math.floor((this.width - lineSize)/2 - x));
+				} else if (lowerCaseLine.indexOf('<right>') > -1){
+					lineSize = SMO.AM.textWidthEx(lines[l].replace(/<right>/i, ''), this.bitmap.fontSize, false, 4, keepFont);
+					keepFont = true;
+					xOffSet.push(this.width - lineSize - x - 6);
+				} else {
+					lineSize = 0;
+					xOffSet.push(lineSize);
+				}
+			}
+			text = this.removeAlignTexts(text);
+
+			//Drawing the texts
+			var textState = { index: 0, x: x, y: y, left: x, xOffSet: xOffSet, lineIndex: 0 };
+			textState.text = this.convertEscapeCharacters(text);
+			textState.height = SMO.AM.textStateHeight(textState, this.bitmap.fontSize, false);
+			while (textState.index < textState.text.length) {
+				this.processCharacter(textState);
+			}
+			return textState.x - x;
+		} else {
+			return 0;
+		}
+	}
+}
+
+Achievement_PopUp.prototype.removeAlignTexts = function(text){
+	text = text.replace(/<center>/ig, '');
+	text = text.replace(/<right>/ig, '');
+	return text;
+}
+
+Achievement_PopUp.prototype.resetFontSettings = function() {
+	this.bitmap.fontFace = this.standardFontFace();
+	this.bitmap.fontSize = this.standardFontSize();
+	this.bitmap.textColor = SMO.getTextColor(0);
+};
+
+Achievement_PopUp.prototype.convertEscapeCharacters = function(text) {
+	return Window_Base.prototype.convertEscapeCharacters.call(this, text);
+};
+
+Achievement_PopUp.prototype.processCharacter = function(textState){
+	Window_Base.prototype.processCharacter.call(this, textState);
+}
+
+Achievement_PopUp.prototype.processNewLine = function(textState) {
+	textState.x = textState.left;
+	textState.y += textState.height;
+	textState.lineIndex++;
+	textState.height = SMO.AM.textStateHeight(textState, this.bitmap.fontSize, false);
+	textState.index++;
+};
+
+Achievement_PopUp.prototype.processNormalCharacter = function(textState) {
+	var c = textState.text[textState.index++];
+	var w = SMO.AM.textWidthEx(c, this.bitmap.fontSize, true);
+	var xOffSet = textState.xOffSet[textState.lineIndex] || 0;
+	this.bitmap.drawText(c, textState.x + xOffSet, textState.y, this.width/2, textState.height);
+	textState.x += w;
+};
+
+Achievement_PopUp.prototype.processNewPage = function(textState) {
+    textState.index++;
+};
+
+Achievement_PopUp.prototype.processEscapeCharacter = function(code, textState) {
+	switch (code) {
+	case 'C':
+		this.bitmap.textColor = SMO.getTextColor(this.obtainEscapeParam(textState));
+		break;
+	case 'I':
+		this.processDrawIcon(this.obtainEscapeParam(textState), textState);
+		break;
+	case '{':
+		this.makeFontBigger();
+		break;
+	case '}':
+		this.makeFontSmaller();
+		break;
+	}
+};
+
+Achievement_PopUp.prototype.processDrawIcon = function(iconIndex, textState) {
+	var xOffSet = textState.xOffSet[textState.lineIndex] || 0;
+	var yOffSet = -(28 - this.bitmap.fontSize)/2;
+    this.drawIcon(iconIndex, textState.x + 2 + xOffSet, textState.y + 2 + yOffSet);
+    textState.x += Window_Base._iconWidth + 4;
+};
+
+Achievement_PopUp.prototype.drawIcon = function(iconIndex, x, y) {
+	var bitmap = ImageManager.loadSystem('IconSet');
+	var pw = Window_Base._iconWidth;
+	var ph = Window_Base._iconHeight;
+	var sx = iconIndex % 16 * pw;
+	var sy = Math.floor(iconIndex / 16) * ph;
+	this.bitmap.blt(bitmap, sx, sy, pw, ph, x, y);
+};
+
+Achievement_PopUp.prototype.makeFontBigger = function() {
+	if (this.bitmap.fontSize <= 96) {
+		this.bitmap.fontSize += 4;
+	}
+};
+
+Achievement_PopUp.prototype.makeFontSmaller = function() {
+	if (this.bitmap.fontSize >= 24) {
+		this.bitmap.fontSize -= 4;
+	}
+};
+
+Achievement_PopUp.prototype.obtainEscapeCode = function(textState) {
+	textState.index++;
+	var regExp = /^[\$\.\|\^!><\{\}\\]|^[A-Z]+/i;
+	var arr = regExp.exec(textState.text.slice(textState.index));
+	if (arr) {
+		textState.index += arr[0].length;
+		return arr[0].toUpperCase();
+	} else {
+		return '';
+	}
+};
+
+Achievement_PopUp.prototype.obtainEscapeParam = function(textState) {
+	var arr = /^\[\d+\]/.exec(textState.text.slice(textState.index));
+	if (arr) {
+		textState.index += arr[0].length;
+		return parseInt(arr[0].slice(1));
+	} else {
+		return '';
+	}
+};
 
 Achievement_PopUp.prototype.fade = function (fadeRate, timer, fadeLimit) {
 	if (!fadeRate) return;
@@ -2256,6 +2888,7 @@ Achievement_PopUp.prototype.update = function(){
 			} else {
 				this.opacity = this._fadeLimit;
 				this._isShowing = false;
+				$gameSystem.achievPopUp.isShowing = false;
 				this._isFading = false;
 			}
 			$gameSystem.achievPopUp.opacity = this.opacity;
@@ -2408,13 +3041,12 @@ Scene_Achievements.prototype.initialize = function(){
 	this._catScrollY = 0;
 	this.createBackground();
 	this.createWindowLayer();
-	this.createSceneNameWindow();
+	this.createTitleWindow();
 	this.createItemWindow();
 	this.createTrophiesWindow();
 	this.createInfoWindow();
-	if (SMO.AM.Sort.enabled){
-		this.createSortSprite();
-	}
+	this.createSortSprite();
+	this.createEditModeButton();
 
 	//After clicking on the Pop Up
 	if (SMO.AM.PopUp.isClickTriggered){
@@ -2444,9 +3076,9 @@ Scene_Achievements.prototype.createBackground = function() {
 	this.addChild(this._backgroundSprite);
 };
 
-Scene_Achievements.prototype.createSceneNameWindow = function(){
-	this._sceneNameWindow = new Window_SceneName();
-	this.addWindow(this._sceneNameWindow);
+Scene_Achievements.prototype.createTitleWindow = function(){
+	this._titleWindow = new Window_SceneName();
+	this.addWindow(this._titleWindow);
 }
 
 Scene_Achievements.prototype.createItemWindow = function(){
@@ -2465,20 +3097,31 @@ Scene_Achievements.prototype.createTrophiesWindow = function(){
 }
 
 Scene_Achievements.prototype.createInfoWindow = function(){
-	this._infoWindow = new Window_Info();
+	this._infoWindow = new Window_AchievInfo();
 	this.addWindow(this._infoWindow);
 }
 
 Scene_Achievements.prototype.createSortSprite = function(){
+	if (!SMO.AM.Sort.enabled) return;
 	this._sortOption = new Sort_Option();
 	this.addChild(this._sortOption);
 	this._sortOption.visible = false;
+}
+
+Scene_Achievements.prototype.createEditModeButton = function(){
+	if (true) return; //the editor is not ready yet D:
+	this._editMode = false;
+	this._editAchievsSprite = new SpriteI_EditAchievs();
+	this.addChild(this._editAchievsSprite);
 }
 
 Scene_Achievements.prototype.onAchievementOk = function(){
 	var index = this._itemWindow.index();
 	if (this._itemWindow._data[index]){
 		if (this.isCategory()){
+			if (this._editAchievsSprite){
+				this._editAchievsSprite.onMenuChange(true);
+			}
 			SMO.AM.currentCategory = this._itemWindow._data[index];
 			this._catScrollY = this._itemWindow._scrollY;
 			this._lastCategory = index;
@@ -2490,10 +3133,11 @@ Scene_Achievements.prototype.onAchievementOk = function(){
 				this._sortOption.visible = true;
 			}
 			this.refreshAll();
-		} else if (this._infoWindow.visible){
-			this._infoWindow.hide();
+		} else if (this._infoWindow.isOpen()){
+			this._infoWindow.close();
+			this._itemWindow.refreshMin();
 		} else {
-			this._infoWindow.show(this._itemWindow._data[index]);
+			this._infoWindow.open(this._itemWindow._data[index]);
 			return;
 		}
 	}
@@ -2512,6 +3156,9 @@ Scene_Achievements.prototype.onAchievementCancel = function(){
 		this.clearRecentUnlock();
 		if (this._sortOption){
 			this._sortOption.visible = false;
+		}
+		if (this._editAchievsSprite){
+			this._editAchievsSprite.onMenuChange();
 		}
 		var categoryIndex = SMO.AM.categories.indexOf(SMO.AM.currentCategory);
 		SMO.AM.currentCategory = 'none';
@@ -2550,6 +3197,20 @@ Scene_Achievements.prototype.refreshAll = function(){
 	})
 }
 
+Scene_Achievements.prototype.refreshMin = function(isUnlock){
+	if (this._itemWindow && this._itemWindow.active){
+		this._itemWindow.refreshMin();
+	}
+
+	if (isUnlock && this._trophiesWindow && this._trophiesWindow.visible){
+		this._trophiesWindow.refresh();
+	}
+
+	if (this._infoWindow && this._infoWindow.isOpen()){
+		this._infoWindow.refreshMin(isUnlock);
+	}
+}
+
 Scene_Achievements.prototype.isReady = function(){
 	var ready = Scene_Base.prototype.isReady.call(this);
 	return ready && ImageManager.isAchievementsReady();
@@ -2571,9 +3232,21 @@ Scene_Achievements.prototype.updateBackground = function(){
 	this._backgrUpdated = true;
 }
 
+if (!Input.keyMapper[65]){
+	Input.keyMapper[65] = 'a';
+}
+
 Scene_Achievements.prototype.updateTriggers = function(){
 	var onChange = false;
-	if (this._infoWindow && this._infoWindow.visible){
+	if (this._editAchievsSprite){
+		if (!this._editMode && Input.isPressed('control') && Input.isPressed('a')){
+			if (this._editAchievsSprite){
+				this._editAchievsSprite.show();
+			}
+		}
+		if (this._editMode) return;
+	}
+	if (this._infoWindow && this._infoWindow.isOpen()){
 		if (Input.isTriggered('ok') || Input.isTriggered('cancel') || 
 			TouchInput.isTriggered() || TouchInput.isCancelled()){
 			SoundManager.playCancel();
@@ -2588,40 +3261,9 @@ Scene_Achievements.prototype.updateTriggers = function(){
 				}
 			}
 			if (Input.isRepeated('left')){
-				onChange = true;
-				this._trophiesWindow._selected--;
-				if (this._trophiesWindow._selected < 0){
-					if (this._trophiesWindow._page > 0){
-						this._trophiesWindow._page--;
-						this._trophiesWindow._selected = this._trophiesWindow._maxItems - 1;
-					} else {
-						this._trophiesWindow._selected = 0;
-						onChange = false;
-					}
-				}
-				if (onChange){
-					SoundManager.playCursor();
-					this._trophiesWindow.refresh();
-					onChange = false;
-				}
+				this._trophiesWindow.selectSlot(this._trophiesWindow._selected - 1);
 			} else if (Input.isRepeated('right')){
-				onChange = true;
-				this._trophiesWindow._selected++;
-				if (this._trophiesWindow._selected >= this._trophiesWindow._pageMaxItems){
-					if (this._trophiesWindow._page < this._trophiesWindow._maxPages - 1){
-						this._trophiesWindow._page++;
-						this._trophiesWindow._selected = 0;
-						SoundManager.playCursor();
-					} else {
-						onChange = false;
-						this._trophiesWindow._selected = this._trophiesWindow._pageMaxItems - 1;
-					}
-				}
-				if (onChange){
-					SoundManager.playCursor();
-					this._trophiesWindow.refresh();
-					onChange = false;
-				}
+				this._trophiesWindow.selectSlot(this._trophiesWindow._selected + 1);
 			}
 		}
 		if (this._sortOption && this._sortOption.visible){
@@ -2664,10 +3306,8 @@ Scene_Achievements.prototype.getButtonOnClick = function(){
 	var button;
 	for (var i in buttons){
 		button = buttons[i];
-		if (x >= button.x1 && x <= button.x2){
-			if (y >= button.y1 && y <= button.y2){
-				return i;
-			}
+		if (x >= button.x1 && x <= button.x2 && y >= button.y1 && y <= button.y2){
+			return i;
 		}
 	}
 	return '';
@@ -2755,6 +3395,14 @@ Window_Achievements.prototype.refreshUnlockedTrophies = function(forceSave){
 				dataChanged = true;
 				SMO.AM.Achievements().trophies.unlocked.push(c + 1);
 				SMO.AM.Achievements().trophies.locked.delete(c + 1);
+				if (SMO.AM.Categories[c].Trophy.onUnlock){
+					try {
+						eval(SMO.AM.Categories[c].Trophy.onUnlock);
+					} catch (e){
+						console.error('Error on trophy\'s unlock script (Trophy\'s name: '+SMO.AM.Categories[c].name+').');
+						console.error(e);
+					}
+				}
 			}
 		}
 	}
@@ -2766,13 +3414,33 @@ Window_Achievements.prototype.refreshUnlockedTrophies = function(forceSave){
 Window_Achievements.prototype.update = function(){
 	Window_Command.prototype.update.call(this);
 	this.updatePosition();
+	this.updateImages();
+}
+
+Window_Achievements.prototype.refreshMin = function(){
+	if (this.isCategory()) {
+		this.refresh();
+	} else {
+		for (var d = 0; d < this._data.length; d++){
+			if (this._data[d].isPlaytimeRequired()){
+				this.redrawItem(d);
+			}
+		}
+	}
 }
 
 Window_Achievements.prototype.updatePosition = function(){
 	if (this._positionRefreshed) return;
-	this.y = SceneManager._scene._sceneNameWindow.height;
+	this.y = SceneManager._scene._titleWindow.height;
 	this.height = Graphics.height - this.y;
 	this._positionRefreshed = true;
+}
+
+Window_Achievements.prototype.updateImages = function(){
+	if (!SMO.AM._categoryRefreshed){
+		this.refresh();
+		SMO.AM._categoryRefreshed = true;
+	}
 }
 
 Window_Achievements.prototype.windowWidth = function(){
@@ -2799,7 +3467,6 @@ Window_Achievements.prototype.itemHeight = function(index){
 Window_Achievements.prototype.isCategory = function(){
 	return SMO.AM.categories.length > 0 && SMO.AM.currentCategory === 'none';
 }
-
 
 Window_Achievements.prototype.standardFontSize = function() {
 	return this.isCategory() ? 26 : 18;
@@ -2843,7 +3510,7 @@ Window_Achievements.prototype.drawItem = function(index) {
     		return SMO.AM.Achievements().achievs.recentUnlock.contains(c.id);
     	})
     	rect2 = this.itemRect(index);
-    	this.drawAchievBackground(rect2);
+    	this.drawAchievBackground(rect2, SMO.AM.Categories[index]);
 
     	if (recent.length > 0 && SMO.AM.Icons.recentUnlock > -1){
     		iconId = SMO.AM.Icons.recentUnlock;
@@ -2895,21 +3562,22 @@ Window_Achievements.prototype.drawItem = function(index) {
 	}
 };
 
-Window_Achievements.prototype.drawAchievBackground = function(rect, achievement){
+Window_Achievements.prototype.drawAchievBackground = function(rect, Data){
 	var bitmap, background, isUnlocked, LH, color1, color2, color3, color4;
-	if (achievement){
-		isUnlocked = achievement.isUnlocked();
-		background = achievement.backgroundImage;
+	var isAchievement = !!Data._isAchievement;
+	if (isAchievement){
+		isUnlocked = Data.isUnlocked();
+		background = Data.backgroundImage;
 	} else {
 		isUnlocked = false;
-		background = null;
+		background = Data.img;
 	}
 	
 	var x0, y0, width, dw, dh;
 	var cursorWidth = 3;
 	x0 = rect.x + cursorWidth;
 	y0 = rect.y + cursorWidth;
-	width = achievement ? rect.width + 6 : rect.width;
+	width = isAchievement ? rect.width + 6 : rect.width;
 	dw = width - cursorWidth * 2;
 	dh = rect.height - cursorWidth * 2;
 
@@ -2919,12 +3587,24 @@ Window_Achievements.prototype.drawAchievBackground = function(rect, achievement)
 	color3 = 'rgba(0,0,0,0.5)';    //body
 
 	this.drawRectS(x0, y0, dw, dh, 1, color1, color3, background);
-	if (achievement){
+	if (isAchievement){
+		var imgName = Data.isSecret() ? SMO.AM.secretBackground : SMO.AM.lockedBackground;
 		if (background){
-			if (!isUnlocked){
-				this.contents.fillRect(x0 + 1, y0 + 1, rect.width - 2, rect.height - cursorWidth * 2 - 2, color2);
+			if (!isUnlocked) {
+				if (imgName) {
+					//Drawing locked/secret background
+					bitmap = ImageManager.loadAchievement(imgName);
+					this.contents.blt(bitmap, 0, 0, bitmap.width, bitmap.height, x0 + 1, y0 + 1, rect.width - 2, rect.height - cursorWidth * 2 - 2);
+				} else {
+					//Drawing black semi-transparent square above the achiev's background
+					this.contents.fillRect(x0 + 1, y0 + 1, rect.width - 2, rect.height - cursorWidth * 2 - 2, color2);
+				}
 			}
+		} else if (imgName){
+			bitmap = ImageManager.loadAchievement(imgName);
+			this.contents.blt(bitmap, 0, 0, bitmap.width, bitmap.height, x0 + 1, y0 + 1, rect.width - 2, rect.height - cursorWidth * 2 - 2);
 		} else {
+			//Drawing darker box behind the achievs' name
 			this.contents.fillRect(x0 + 1, y0 + 1, dw - 2, this.lineHeight(), color2);
 		}
 	}
@@ -2984,8 +3664,8 @@ Window_Achievements.prototype.drawAchievBody = function(index, rect, color){
 		rate = achievement.isUnlocked() ? 100 : status.unlocked;
 		this.drawGauge(rect.x + 8, y + LH + 12, rect.width - 10, Math.floor(rate) / 100, SMO.AM.Texts.gaugeColor1, SMO.AM.Texts.gaugeColor2, LH - 12);
 		text = achievement.Description;
-		text = this.removeTextCodes(text);
-		var texts = SMO.AM.wrapText(text, rect.width - 8, this.contents.fontSize, LH);
+		text = SMO.AM.removeTextCodes(text);
+		var texts = SMO.AM.wrapText(text, rect.width - 8, this.contents.fontSize, true);
 		texts = texts.split('\n');
 		for (var t = 0; t < 3; t++){
 			if (t === 2 && texts.length > 3){
@@ -2998,22 +3678,15 @@ Window_Achievements.prototype.drawAchievBody = function(index, rect, color){
 			}
 		}
 		this.changeTextColor(color);
-		text = Math.round(rate);
+		text = Math.floor(rate);
+		if (text === 100 && !achievement.isUnlocked()){
+			text--;
+		}
 		text = text + '%';
 		this.contents.outlineColor = 'rgba(0,0,0,0.8)';
 		this.drawText(text, rect.x + 3, y + LH * 2 - 2, rect.width - 3, 'center');
 		this.contents.outlineColor = 'rgba(0,0,0,0.5)';
 	}	
-}
-
-Window_Achievements.prototype.removeTextCodes = function(text){
-	if (text){
-		text = text.replace(/\\c\[.?.?\]/g, '');
-		text = text.replace(/\\i\[.?.?\]/g, '');
-		text = text.replace(/\\c\\\(.?.?\\\)/g, '');
-		text = text.replace(/\\i\\\(.?.?\\\)/g, '');
-	}
-	return text;
 }
 
 Window_Achievements.prototype.drawGauge = function(x, y, width, rate, color1, color2, height) {
@@ -3025,7 +3698,7 @@ Window_Achievements.prototype.drawGauge = function(x, y, width, rate, color1, co
 };
 
 Window_Achievements.prototype.getCommandListData = function(){
-	var data;
+	var data, candidates;
 	if (this.isCategory()){
 		data = SMO.AM.categories;
 	} else {
@@ -3103,13 +3776,14 @@ Window_Trophies.prototype.constructor = Window_Trophies;
 
 Window_Trophies.prototype.initialize = function(){
 	Window_Base.prototype.initialize.call(this, 0, 0, Graphics.width, Graphics.height);
+	this._trophies = null;
 	this.buttons = {};
 	this._data = [];
 	this._desc = {};
 	this._page = 0;
 	this._maxItems = 0;
 	this._maxPages = 0;
-	this._selected = 0;
+	this._selected = -1;
 	if (SMO.AM.currentCategory != 'none'){
 		this.hide();
 	}
@@ -3131,6 +3805,62 @@ Window_Trophies.prototype.updatePosition = function(){
 	this._positionUpdated = true;
 }
 
+Window_Trophies.prototype.createTrophySprites = function(allItems, width, height){
+	var maxItems = Math.min(this._maxItems, allItems);
+	var widthB = Math.floor(width * 1.25);
+	var heightB = Math.floor(height * 1.25);
+	var Trophy;
+	this._trophies = [];
+	for (var s = 0; s < maxItems; s++){
+		Trophy = new Sprite(new Bitmap(widthB, heightB));
+		
+		Trophy._trophyIndex = s;
+		Trophy._container = this;
+		Trophy.update = function(){
+			if (this._container && this._container.visible){
+				Sprite.prototype.update.call(this);
+				if (this._container._selected === this._trophyIndex){
+					if (this.scale.x < 1){
+						this.scale.x += 0.01;
+						this.scale.y += 0.01;
+					}
+				} else if (this.scale.x >= 0.81){
+					this.scale.x -= 0.01;
+					this.scale.y -= 0.01;
+				}
+			}
+		}
+		Trophy.anchor.x = 0.5;
+		Trophy.anchor.y = 0.5;
+		Trophy.scale.x = 0.8;
+		Trophy.scale.y = 0.8;
+		this._trophies.push(Trophy);
+		this.addChild(this._trophies.last());
+	}
+}
+
+Window_Trophies.prototype.clearTrophies = function(allItems, width, height){
+	if (!this._trophies){
+		this.createTrophySprites(allItems, width, height);
+	}
+	this._trophies.forEach(function(t){
+		t.bitmap.clear();
+	});
+}
+
+Window_Trophies.prototype.drawTrophy = function(index, x, y, imgName, isUnlocked){
+	if (!this._trophies[index]) return;
+	var Trophy = this._trophies[index];
+	var Bitmap = Trophy.bitmap;
+	var borderColor = isUnlocked ? SMO.AM.Texts.unlockedColor : '#FFFFFF';
+	this._trophies[index].x = Math.floor(x + Trophy.width * 1/2);
+	this._trophies[index].y = Math.floor(y + Trophy.height * 1/2);
+	Bitmap.drawRectS(0, 0, Trophy.width, Trophy.height, 2, borderColor, null, imgName);
+	if (!isUnlocked){
+		Bitmap.drawText('?', 0, Math.floor((Trophy.height - Bitmap.fontSize)/2), Trophy.width, Bitmap.fontSize, 'center');
+	}
+}
+
 Window_Trophies.prototype.drawTrophiesBody = function(){
 	var progressTxt, allAchievs, unlockedAchievs;
 	var rate, maxWidth, x, y, width, height;
@@ -3150,18 +3880,19 @@ Window_Trophies.prototype.drawTrophiesBody = function(){
 	//Drawing trophies window's description
 	this.contents.fontSize -= 5;
 	var trophiesDesc = SMO.AM.wrapText(SMO.AM.Texts.trophiesDesc, maxWidth, this.contents.fontSize).split('\n');
-	
+	this._lockFontState = true;
 	for (var t = 0; t < trophiesDesc.length; t++){
-		this.drawText(trophiesDesc[t], x, y + this.lineHeight() * (t + 1), maxWidth);
+		this.drawTextEx(trophiesDesc[t], x, y + this.lineHeight() * (t + 1), maxWidth);
 	}
+	this._lockFontState = false;
 	this.contents.fontSize += 5;
 
 	//Drawing trophies
-	maxLines = SMO.AM.TrophiesConfigs.lines; 
+	maxLines = SMO.AM.TrophiesConfigs.lines;
 	maxCols = SMO.AM.TrophiesConfigs.cols;
 	this._maxItems = maxLines * maxCols;
 	if (SMO.AM.TrophiesConfigs.enabled){
-		this._data = SMO.AM.Categories;
+		this._data = SMO.AM.Categories.filter(function(c) {return !c.Trophy.hidden;});
 	} else {
 		this._data = [];
 		var addData, unlockedIds = SMO.AM.Achievements().achievs.unlocked;
@@ -3171,14 +3902,19 @@ Window_Trophies.prototype.drawTrophiesBody = function(){
 		}
 	}
 	this._maxPages = Math.ceil(this._data.length/this._maxItems);
-	this._pageMaxItems = 0;
+	this._pageMaxItems = Math.min(this._maxItems, this._data.length - this._page * this._maxItems);
+
 	line = 0; col = 0;
 	var gap = 10;
 	y = 140;
 	width = Math.floor((maxWidth/2 - gap * (maxCols + 1))/maxCols);
 	height = Math.floor((this.height - 284 - gap * (maxLines + 1))/maxLines) - 5;
 	trophiesHeight = Math.floor(this.height - 284);
-	
+
+	this.clearTrophies(this._data.length, width, height);
+	if (this._selected === -1){
+		this.selectSlot(0, false, false);
+	}
 	var x2, y2, c, slotIndex, imgName, isUnlocked, command, buttonName, color, borderColor;
 	for (c = this._maxItems * this._page; c < this._data.length; c++){
 		if (col >= maxCols){
@@ -3186,26 +3922,32 @@ Window_Trophies.prototype.drawTrophiesBody = function(){
 			col = 0;
 		}
 		if (maxLines > line) {
-			this._pageMaxItems++;
-			x2 = x + gap + (width + gap) * col; y2 = y + (height + gap) * line;
 			slotIndex = c - this._maxItems * this._page;
 			if (SMO.AM.TrophiesConfigs.enabled){
 				isUnlocked = SMO.AM.Achievements().trophies.unlocked.contains(c + 1);
-				imgName = isUnlocked ? SMO.AM.Categories[c].image : '';
+				imgName = isUnlocked ? SMO.AM.Categories[c].Trophy.img : '';
 			} else {
 				isUnlocked = !!this._data[slotIndex].id;
 				imgName = isUnlocked ? this._data[slotIndex].backgroundImage : '';
 			}
-			if (slotIndex === this._selected){
-				color = SMO.AM.Texts.selectorColor;
-				this.drawRectS(x2 - 1, y2 - 1, width + 2, height + 2, 3, color, null, imgName);
+			if (SMO.AM.TrophiesConfigs.selectStyle === 'cursor'){
+				x2 = x + gap + (width + gap) * col;
+				y2 = y + (height + gap) * line;
+				if (slotIndex === this._selected){
+					color = SMO.AM.Texts.selectorColor;
+					this.drawRectS(x2 - 1, y2 - 1, width + 2, height + 2, 3, color, null, imgName);
+				} else {
+					borderColor = isUnlocked ? SMO.AM.Texts.unlockedColor : '#FFFFFF';
+					this.drawRectS(x2, y2, width, height, 2, borderColor, null, imgName);
+				}
+				if (!isUnlocked){
+					this.drawText('?', x2, y2 + height/2 - this.lineHeight()/2, width, 'center');
+				}
 			} else {
-				borderColor = isUnlocked ? SMO.AM.Texts.unlockedColor : '#FFFFFF';
-				this.drawRectS(x2, y2, width, height, 2, borderColor, null, imgName);
+				x2 = x + gap + (width + gap) * col + gap * (maxCols - 1)/2 - maxCols/2;
+				y2 = y + (height + gap) * line + gap * (maxLines - 1)/2  - maxLines/2;
+				this.drawTrophy(slotIndex, x2, y2, imgName, isUnlocked);
 			}
-			if (!isUnlocked){
-				this.drawText('?', x2, y2 + height/2 - this.lineHeight()/2, width, 'center');
-			}	
 			command = 'this.selectSlot('+slotIndex+');';
 			buttonName = 'slot' + slotIndex;
 			this.addButton(buttonName, x2+16, x2+width+18, y2 + 16, y2 + height + 16, true, command);
@@ -3213,7 +3955,7 @@ Window_Trophies.prototype.drawTrophiesBody = function(){
 		}
 	}
 
-	//Drawing description box
+	//Defining the description's box properties
 	x = maxWidth/2 + 12; width = maxWidth/2 - 12; height = height * maxLines + gap  * (maxLines - 1);
 	this._desc = {
 		x:x,
@@ -3249,8 +3991,8 @@ Window_Trophies.prototype.drawArrowButtons = function(x, y){
 	this.contents.drawTriangleS(x + 90, y, 30, 20, 'right', colorB2);
 
 	//Buttons set up
-	var commandB1 = 'this._page--;' + 'this.select(0);' + 'SoundManager.playCursor();';
-	var commandB2 = 'this._page++;' + 'this.select(0);' + 'SoundManager.playCursor();';
+	var commandB1 = 'this._page--;' + 'this.selectSlot(0);';
+	var commandB2 = 'this._page++;' + 'this.selectSlot(0);';
 	this.addButton('leftArrow', x - 2, x + 18, y - 5, y + 25, enabledB1, commandB1);
 	this.addButton('rightArrow', x + 108, x + 128, y - 5, y + 25, enabledB2, commandB2);
 
@@ -3258,6 +4000,13 @@ Window_Trophies.prototype.drawArrowButtons = function(x, y){
 	var text = this._page + 1;
 	text += '/' + this._maxPages;
 	this.drawText(text, x, y - 18, 90, 'center');
+}
+
+Window_Trophies.prototype.resetFontSettings = function(){
+	if (this._lockFontState) return;
+	this.contents.fontFace = this.standardFontFace();
+	this.contents.fontSize = this.standardFontSize();
+	this.resetTextColor();
 }
 
 Window_Trophies.prototype.addButton = function(name, x1, x2, y1, y2, enabled, onClick){
@@ -3284,10 +4033,19 @@ Window_Trophies.prototype.onClick = function(buttonName){
 	}
 }
 
-Window_Trophies.prototype.selectSlot = function(index){
+Window_Trophies.prototype.selectSlot = function(index, playCursor, refresh){
 	if (this.select(index)){
-		this.refresh();
-		SoundManager.playCursor();
+		this.swapChildren(this._trophies[this._selected], this.children.last());
+		if (refresh || refresh === undefined){
+			if (SMO.AM.TrophiesConfigs.selectStyle === 'cursor'){
+				this.refresh();
+			} else {
+				this.refreshTrophyDesc();
+			}
+		}
+		if (playCursor || playCursor === undefined){
+			SoundManager.playCursor();
+		}
 	}
 }
 
@@ -3295,7 +4053,17 @@ Window_Trophies.prototype.select = function(index){
 	var dataIndex = index + this._maxItems * this._page;
 	var data = this._data[dataIndex];
 	if (data){
-		this._selected = index;	
+		if (index < 0){
+			this._page--;
+			this._selected = this._maxItems - 1;
+			this.refresh();
+		} else if (index + 1 > this._maxItems){
+			this._page++;
+			this._selected = 0;
+			this.refresh();
+		} else {
+			this._selected = index;
+		}
 		return true;
 	}
 	return false;
@@ -3315,19 +4083,30 @@ Window_Trophies.prototype.refresh = function(){
 	this.drawTrophyDesc();
 }
 
+Window_Trophies.prototype.refreshTrophyDesc = function(){
+	var x = this._desc.x;
+	var y = this._desc.y;
+	var width = this._desc.width;
+	var height = this._desc.height;
+	this.contents.clearRect(x, y, width, height);
+	this.drawRectS(x, y, width, height, 2);
+	this.drawTrophyDesc();
+}
+
 Window_Trophies.prototype.drawTrophyDesc = function(){
 	var index = this._selected + this._maxItems * this._page;
 	var data = this._data[index];
 	if (data){
-		var isUnlocked = SMO.AM.TrophiesConfigs.enabled ? SMO.AM.Achievements().trophies.unlocked.contains(index + 1) : data.id > 0;
-		var image = SMO.AM.TrophiesConfigs.enabled ? data.image : data.backgroundImage;
+		var isTrophies = SMO.AM.TrophiesConfigs.enabled;
+		var isUnlocked = isTrophies ? SMO.AM.Achievements().trophies.unlocked.contains(index + 1) : data.id > 0;
+		var image = SMO.AM.TrophiesConfigs.enabled ? data.Trophy.img : data.backgroundImage;
 		var LH = this.lineHeight() - 10;
 		if (image && isUnlocked){
 			var bitmap = ImageManager.loadAchievement(image);
 			this.contents.blt(bitmap, 0, 0, bitmap.width, bitmap.height, this._desc.x + 2, this._desc.y + 2, this._desc.width - 4, this._desc.height - 4);
 		}
 		this.contents.fontSize -= 10;
-		var description = isUnlocked ? data.description : SMO.AM.Texts.locked;
+		var description = isUnlocked ? isTrophies ? data.Trophy.description : data.description : SMO.AM.Texts.locked;
 		var texts = description.split('\n');
 		var txtHeight = LH * texts.length;
 		var alignX = isUnlocked ? 'left' : 'center';
@@ -3348,16 +4127,16 @@ Window_Trophies.prototype.drawTrophyDesc = function(){
 		} else {
 			this.contents.fontSize += 10;
 			//Background for the acheivement's name
-			this.contents.fillRect(this._desc.x + 10, alignY.up + 4, this._desc.width - 20, LH + 15, 'rgba(0,0,0,0.5)');
+			this.contents.fillRect(this._desc.x + 4, alignY.up + 4, this._desc.width - 8, LH + 15, 'rgba(0,0,0,0.5)');
 			//Background for the acheivement's unlock date
-			this.contents.fillRect(this._desc.x + 10, alignY.down + 4, this._desc.width - 20, LH, 'rgba(0,0,0,0.5)');
+			this.contents.fillRect(this._desc.x + 4, alignY.down + 4, this._desc.width - 8, LH, 'rgba(0,0,0,0.5)');
 
 			//Drawing name
 			this.drawText(data.name, this._desc.x + 8, alignY.up + 5, this._desc.width - 16, 'center');
 			this.changeTextColor(SMO.AM.Texts.unlockedColor);
 			this.contents.fontSize -= 10;
 			//Drawing unlock date
-			this.drawText(data.getUnlockDate(), this._desc.x + 8, alignY.down, this._desc.width - 16, 'center');
+			this.drawText(data.getUnlockDateString(), this._desc.x + 8, alignY.down, this._desc.width - 16, 'center');
 			this.changeTextColor(this.normalColor());
 		}
 		
@@ -3368,95 +4147,114 @@ Window_Trophies.prototype.drawTrophyDesc = function(){
 //===============================================================================================
 // Info Window
 //===============================================================================================
-function Window_Info () {
+function Window_AchievInfo () {
 	this.initialize.apply(this, arguments);
 }
 
-Window_Info.prototype = Object.create(Window_Base.prototype);
-Window_Info.prototype.constructor = Window_Info;
+Window_AchievInfo.prototype = Object.create(Window_Base.prototype);
+Window_AchievInfo.prototype.constructor = Window_AchievInfo;
 
-Window_Info.prototype.initialize = function(){
+Window_AchievInfo.prototype.initialize = function(){
 	var width = 408;
 	var height = 468;
 	var x = Math.round((Graphics.width - width)/2);
 	var y = Math.round((Graphics.height - height)/2);
-	this._widthFix = -40;
+	this._textMaxWidth = width - 36;
 	this._data = null;
 	this._lines = 7;
 	Window_Base.prototype.initialize.call(this, x, y, width, height);
-	this.hide();
+	this.openness = 0;
 }
 
-Window_Info.prototype.refresh = function(){
-	if (this.visible){
+Window_AchievInfo.prototype.update = function(){
+	Window_Base.prototype.update.call(this);
+	if (this.isOpen()){
+		var scene = SceneManager._scene;
+		if (scene._itemWindow && scene._itemWindow.active){
+			this.close();
+			scene._itemWindow.refreshMin();
+		}
+	}
+}
+
+Window_AchievInfo.prototype.refresh = function(openning){
+	if (this.isOpen() || openning){
+		this.contents.clear();
 		this.drawContents();
 	}
 }
 
-Window_Info.prototype.reStyle = function(){
+Window_AchievInfo.prototype.refreshMin = function(isUnlock){
+	if (this._data && this._data.isPlaytimeRequired() || isUnlock){
+		this.refresh();
+	}
+}
+
+Window_AchievInfo.prototype.reStyle = function(){
 	this.reSize();
 	this.rePosition();
 }
 
-Window_Info.prototype.reSize = function(){
-	this.height = this._lines * this.lineHeight() - 26;
+Window_AchievInfo.prototype.reSize = function(){
+	this.height = this._lines * this.lineHeight() - 18;
 }
 
-Window_Info.prototype.rePosition = function(){
+Window_AchievInfo.prototype.rePosition = function(){
 	this.y = (Graphics.height - this.height)/2;
 }
 
-Window_Info.prototype.show = function(achievement){
+Window_AchievInfo.prototype.open = function(achievement){
 	this.setData(achievement);
-	Window_Base.prototype.show.call(this);
-	this.drawContents();
+	Window_Base.prototype.open.call(this);
+	this.refresh(true);
 }
 
-Window_Info.prototype.setData = function(data){
+Window_AchievInfo.prototype.setData = function(data){
 	this._data = data ? data : null;
 }
 
-Window_Info.prototype.drawContents = function(){
-	this.contents.clear();
+Window_AchievInfo.prototype.drawContents = function(){
 	if (this._data){
-		this._lines = 7;
-		var item, name, description, LH, iconBoxWidth, secretLines;
-		item = this._data;
-		LH = this.lineHeight();
-		if (item.isSecret()){
-			var fontSize = this.contents.fontSize - 10;
-			var maxWidth = this.width + this._widthFix;
+		this._lines = 6;
+		var name, description, iconBoxWidth, secretLines;
+		var achiev = this._data;
+		var LH = this.lineHeight();
+		if (achiev.isSecret()){
+			var fontSize = this.contents.fontSize - 6;
+			var maxWidth = this._textMaxWidth;
 			var sDesc = SMO.AM.wrapText(SMO.AM.Texts.secretAchievDesc, maxWidth, fontSize);
 			secretLines = sDesc.split('\n');
 			secretLines = secretLines.length + 1;
 			this._lines = secretLines.clamp(3, 7);
-			this.contents.fontSize -= 10;
+			this.contents.fontSize -= 6;
 			this._lockFontState = true;
 			this.drawTextEx(sDesc, 0, 0);
 			this._lockFontState = false;
-			this.contents.fontSize += 10;
+			this.contents.fontSize += 6;
 			this.reStyle();
 			return;
 		}
 		
 		//Draw achievement's icon
 		iconBoxWidth = 0;
-		if (item.iconIndex > -1){
+		if (achiev.iconIndex > -1){
 			iconBoxWidth = Window_Base._iconWidth + 6;
-			this.drawIcon(item.iconIndex, 0, 0);
+			this.drawIcon(achiev.iconIndex, 0, 0);
 		}
 
 		//Draw name
-		name = item.isUnlocked() ? item.Name : item.name;
+		name = achiev.isUnlocked() ? achiev.Name : achiev.name;
 		this.drawText(name, iconBoxWidth, 0, this.width - iconBoxWidth, 'left');
 		this.drawHorzLine(Math.round(LH/2));
 		this.contents.fontSize -= 6;
 		this._lockFontState = true;
 
 		//Draw description
-		description = item.isUnlocked() ? item.Description : item.description;
-		this.drawTextEx(description, 0, LH, this.width, 'left');
-		this.drawHorzLine(LH * 4);
+		description = achiev.isUnlocked() ? achiev.Description : achiev.description;
+		description = SMO.AM.wrapText(description, this._textMaxWidth, this.contents.fontSize);
+		this.drawTextEx(description, 0, LH);
+		var txtOffset = SMO.AM.Texts.requirements ? 0 : -6;
+		this.drawHorzLine(LH * 4 + txtOffset);
 
 		//Draw status
 		this.drawAchievStatus();
@@ -3475,126 +4273,146 @@ Window_Info.prototype.drawContents = function(){
 	}
 }
 
-Window_Info.prototype.drawAchievStatus = function(){
+Window_AchievInfo.prototype.drawIcon = function(iconIndex, x, y) {
+    var bitmap = ImageManager.loadSystem('IconSet');
+    var pw = Window_Base._iconWidth;
+    var ph = Window_Base._iconHeight;
+    var sx = iconIndex % 16 * pw;
+    var sy = Math.floor(iconIndex / 16) * ph;
+    this.contents.blt(bitmap, sx, sy, pw, ph, x + 2, y, pw - 4, ph - 4);
+};
+
+Window_AchievInfo.prototype.drawAchievStatus = function(){
 	var item = this._data;
 	if (item.isUnlocked()){
-		var date = item.getUnlockDate().split(' ');
-		var text = SMO.AM.Texts.unlockedIn.replace(/\\date/g, date[0]).replace(/\\time/g, date[1]);
+		var text = item.getUnlockDateString();
 	} else {
 		var text = SMO.AM.Texts.locked;
 	}
-	var y = this.lineHeight() * 4 + this._widthFix/2;
+	var y = this.lineHeight() * 4 - 20;
 	var color = item.isUnlocked() ? SMO.AM.Texts.unlockedColor : this.systemColor();
 	this.changeTextColor(color);
-	this.drawText(text, 0, y, this.width + this._widthFix, 'center');
+	this.drawText(text, 0, y, this._textMaxWidth, 'center');
 	this.changeTextColor(this.normalColor());
 }
 
-Window_Info.prototype.drawRequirements = function(){
-	var requirement, requirements, text, align, centerX;
-	var values, isCompleted, current;
-	var r, x1, x2, y1, y2, maxWidth1, maxWidth2, iconX;
-	var item  = this._data; //achievement
-	var LH    = this.lineHeight();
-	maxWidth1 = this.width;
-	x1        = this._widthFix/2;
-	y1        = LH * 5  + x1;
+Window_AchievInfo.prototype.drawRequirements = function(){
+	var req, y2, requirements, text, align, iconX;;
+	var values, currentValue, isMet, isFixedValue;
+	var LH        = this.lineHeight();
+	var y1        = LH * 4  + 16;
+	var maxWidth  = this._textMaxWidth;
+	var achiev    = this._data;
+	var padding   = 12;                     //half distance between two columns
+	var colWidth  = maxWidth/2 - padding;   //column width
+	var col2_x    = colWidth + padding * 2; //initial X for the column on the right
 
-	this.changeTextColor(this.systemColor());
-	this.drawText(SMO.AM.Texts.requirements, x1, y1, maxWidth1, 'center');
-	this.changeTextColor(this.normalColor());
-	this.contents.fontSize -= 4;
-	this._reqLines = 1;
+	this._reqLines = 0;
 	this._column = 1;
-	
-	requirements = item.requirements;
-	if (requirements.length === 0){
-		this.drawText(SMO.AM.Texts.none, x1, y1 + LH, maxWidth1, 'center')
-		this._lines++;
+	if (SMO.AM.Texts.requirements){
+		//Drawing "Requirements:" text
+		this.changeTextColor(this.systemColor());
+		this.drawText(SMO.AM.Texts.requirements, 0, y1, maxWidth, 'center');
+		this.changeTextColor(this.normalColor());
 		this._reqLines++;
-		this.contents.fontSize += 4;
+		this._lines++;
+	}	
+	this.contents.fontSize = 18;//22 -> 18
+	
+	requirements = achiev.requirements;
+	if (requirements.length === 0){
+		//Drawing "None" text
+		this.drawText(SMO.AM.Texts.none, 0, y1 + LH * this._reqLines, maxWidth, 'center')
+		this._reqLines++;
+		this._lines++;
+		this.contents.fontSize = 22;
 		return;
 	}
-	for (r = 0; r < requirements.length; r++){
-		requirement = requirements[r];
-		values = SMO.AM.getRequirementValues(requirement, item);
-		isCompleted = item.isUnlocked() || values.state;
 
-		current = isCompleted && requirement.comparison === '>=' ? values.finalValue : values.currentValue;
-		text = values.name;
+	//Drawing Requirements
+	for (var r = 0; r < requirements.length; r++){
+		req = requirements[r];
+		values = SMO.AM.getRequirementValues(req, achiev);
+		isMet = achiev.isUnlocked() || values.state;
+		isFixedValue = isMet && req.comparison === '>=';
+
+		currentValue = isFixedValue ? values.finalValue : values.currentValue;
 		iconIndex = values.iconIndex;
+		text = values.name;
 
-		if (isCompleted){this.changeTextColor(SMO.AM.Texts.unlockedColor)};
+		if (isMet){this.changeTextColor(SMO.AM.Texts.unlockedColor)};
 
-		padding   = 12;
-		centerX   = (maxWidth1 + this._widthFix)/2 + padding;
-		align     = requirements.length > 1 ? 'left' : 'center';
-		maxWidth2 = requirements.length > 1 ? maxWidth1/2 - padding - 20 : maxWidth1;
-		x2        = requirements.length > 1 ? 0 : x1;
-		y2        = y1 + LH * this._reqLines;
-
-		iconSize = 0;
-		if (requirement.alias){
-			text = requirement.alias;
+		if (req.alias){
+			text = req.alias;
 			text = this.convertAliasCodes(text, values.currentValue, values.finalValue);
-			iconIndex = requirement.aliasIcon;
-		} else if (!['switch', 'party member'].contains(requirement.type)){
-			text += ' ' + current + '/' + values.finalValue;
-		}
-		if (iconIndex > -1){
-			iconSize = Window_Base._iconWidth + 4;
+			iconIndex = req.aliasIcon;
+		} else if (!['switch', 'party member'].contains(req.type)){
+			text += ' ' + currentValue + '/' + values.finalValue;
 		}
 
-		if (this._column === 1){//Left column
+		y2         = y1 + LH * this._reqLines;
+		align      = requirements.length > 1 ? 'left' : 'center';
+		iconSize   = iconIndex > -1 ? Window_Base._iconWidth + 4 : 0;
+
+		if (this._column === 1){
+			//Column on the left
 			if (iconSize){
-				iconX = requirements.length > 1 ? x2 : centerX - 8 - this.calcTextWidth(text)/2;
+				iconX = requirements.length > 1 ? 0 : (maxWidth - iconSize - SMO.AM.textWidthEx(text, this.contents.fontSize, true))/2;
 				this.drawIcon(iconIndex, iconX, y2);
 			}
-			this.drawText(text, x2 + iconSize, y2, maxWidth2 - iconSize, align);
+			this.drawText(text, iconSize, y2, maxWidth - iconSize, align);
 			this._lines++;
 			this._reqLines++;
 			this._column++;
-		} else {//Right column
+		} else {
+			//Column on the right
 			if (iconSize){
-				this.drawIcon(iconIndex, centerX, y2 - LH);
+				this.drawIcon(iconIndex, col2_x, y2 - LH);
 			}
-			this.drawText(text, centerX + iconSize, y2 - LH, maxWidth2 - iconSize, 'left');
+			this.drawText(text, col2_x + iconSize, y2 - LH, colWidth - iconSize, 'left');
 			this._column = 1;
 		}
 		this.changeTextColor(this.normalColor());
 	}
-	this.contents.fontSize += 4;
+	this.contents.fontSize = 22;
 }
 
-Window_Info.prototype.convertAliasCodes = function(text, value1, value2){
+Window_AchievInfo.prototype.convertAliasCodes = function(text, value1, value2){
 	value1 = Number(value1);
 	value2 = Number(value2);
-	text = text.replace(/\\value1/g, value1);
-	text = text.replace(/\\value2/g, value2);
+	text = text.replace(/\\value1/g, value1);//old versions
+	text = text.replace(/\\value2/g, value2);//old versions
+	text = text.replace(/<CurrentValue>/g, value1);
+	text = text.replace(/<RequiredValue>/g, value2);
 	return text;
 }
 
-Window_Info.prototype.drawRewards = function(){
-	var item = this._data;//achievement
-	var x1, x2, y1, y2, LH, text, maxWidth, maxWidth2, align, padding, centerX;
-	var reward, rewards, itemId, amount;
-	var iconIndex, iconSize, iconX, iconY, extraLines;
-	rewards  = item.rewards;
-	LH       = this.lineHeight();
-	x1       = this._widthFix/2;
-	y1       = LH  * (4 + this._reqLines) + 14;
-	maxWidth = this.width;
+Window_AchievInfo.prototype.drawRewards = function(){
+	var y2, reward, itemId, amount, text, align;
+	var iconIndex, iconSize, iconX;
+	var txtOffset = SMO.AM.Texts.rewards ? 0 : 8;
+	var rewards  = this._data.rewards;
+	var LH       = this.lineHeight();
+	var y1       = LH  * (4 + this._reqLines) + 14 + txtOffset;
+	var maxWidth = this._textMaxWidth; 
+	var padding  = 12;                   //half distance between two columns
+	var col2_x   = maxWidth/2 + padding; //initial X for the column on the right
 
-	this.changeTextColor(this.systemColor());
-	this.drawText(SMO.AM.Texts.rewards, x1, y1, maxWidth, 'center');
-	this.changeTextColor(this.normalColor());
-	this.contents.fontSize -= 4;
-	this._lines++;
-	this._rewLines = 1;
+	this._rewLines = 0;
 	this._column = 1;
+	if (SMO.AM.Texts.rewards){
+		//Drawing "Rewards:" text
+		this.changeTextColor(this.systemColor());
+		this.drawText(SMO.AM.Texts.rewards, 0, y1, maxWidth, 'center');
+		this.changeTextColor(this.normalColor());
+		this._rewLines++;
+		this._lines++;
+	}
+	this.contents.fontSize = 18;//22 -> 18
 
-	if (rewards.length === 0){
-		this.drawText(SMO.AM.Texts.none, x1, y1 + LH, maxWidth, 'center');
+	if (rewards.length === 0 && SMO.AM.Texts.none){
+		//Drawing "None" text
+		this.drawText(SMO.AM.Texts.none, 0, y1 + LH, maxWidth, 'center');
 		this._rewLines++;
 		this._lines++;
 	} else {
@@ -3628,37 +4446,32 @@ Window_Info.prototype.drawRewards = function(){
 			if (!['custom(advanced)','gold'].contains(reward.type)){
 				text += ' x ' + amount;
 			}
-			padding  = 12;
-			iconSize = 0;
-			centerX  = (maxWidth + this._widthFix)/2 + padding;
-			y2       = y1 + LH * this._rewLines;
+
 			if (reward.alias){
 				text = reward.alias;
 				iconIndex = reward.aliasIcon;
 			}
-			if (iconIndex > -1){
-				iconX = this._column === 1 ? 0 : centerX;
-				if (rewards.length === 1){
-					iconX = (maxWidth - this.calcTextWidth(text) - Window_Base._iconWidth)/2 - 2;
-					centerX += Window_Base._iconWidth;
-				}
-				iconY = this._column === 1 ? y2 : y2 - LH;
-				iconSize = Window_Base._iconWidth + 4;
-				this.drawIcon(iconIndex, iconX, iconY);
-			}
-			centerX += iconSize;
 
+			iconSize  = iconIndex > -1 ? Window_Base._iconWidth + 4 : 0;
 			align     = rewards.length > 1 ? 'left' : 'center';
-			maxWidth2 = rewards.length > 1 ? centerX/2 + padding + 4 : maxWidth;
-			x2        = rewards.length > 1 ? iconSize : x1;
-			x2        = (iconIndex > -1 && rewards.length === 1) ? x2 + Window_Base._iconWidth/2 : x2;
-			if (this._column === 1) {//Left column
-				this.drawText(text, x2, y2, maxWidth2, align);
+			y2        = y1 + LH * this._rewLines;
+			
+			if (this._column === 1) {
+				//Column on the left
+				if (iconSize){
+					iconX = rewards.length > 1 ? 0 : (maxWidth - SMO.AM.textWidthEx(text, this.contents.fontSize, true) - Window_Base._iconWidth)/2;
+					this.drawIcon(iconIndex, iconX, y2);
+				}
+				this.drawText(text, iconSize, y2, maxWidth - iconSize, align);
 				this._rewLines++;
 				this._lines++;
 				this._column++;
-			} else {//Right column
-				this.drawText(text, centerX, y2 - LH, maxWidth2, 'left');
+			} else {
+				//Column on the right
+				if (iconSize){
+					this.drawIcon(iconIndex, col2_x, y2 - LH);
+				}
+				this.drawText(text, col2_x + iconSize, y2 - LH, maxWidth/2 - iconSize, 'left');
 				this._column = 1;
 			}		
 		}
@@ -3666,14 +4479,14 @@ Window_Info.prototype.drawRewards = function(){
 	this.contents.fontSize += 4;
 }
 
-Window_Info.prototype.drawHorzLine = function(y) {
+Window_AchievInfo.prototype.drawHorzLine = function(y) {
     var lineY = y + this.lineHeight() / 2 - 1;
     this.contents.paintOpacity = 48;
     this.contents.fillRect(0, lineY, this.contentsWidth(), 2, this.normalColor());
     this.contents.paintOpacity = 255;
 };
 
-Window_Info.prototype.resetFontSettings = function(){
+Window_AchievInfo.prototype.resetFontSettings = function(){
 	if (this._lockFontState) return;
 	this.contents.fontFace = this.standardFontFace();
    	this.contents.fontSize = this.standardFontSize();
@@ -3732,6 +4545,7 @@ Sort_Option.prototype.drawSortBody = function(){
 }
 
 Sort_Option.prototype.onClick = function(index){
+	if (SceneManager._scene._editMode) return;
 	var x = TouchInput._x - this.x;
 	var y = TouchInput._y - this.y;
 	var scene = SceneManager._scene;
@@ -3752,9 +4566,10 @@ Sort_Option.prototype.onClick = function(index){
 				$gameSystem.achievs.sortType = this._selected;
 				SoundManager.playOk();
 				iw.refresh();
-			} else{
+			} else {
 				this._selecting = this._selected;
 				SoundManager.playCancel();
+				iw.refreshMin();
 			}
 			iw.activate();
 		}
@@ -3768,6 +4583,1361 @@ Sort_Option.prototype.onClick = function(index){
 		}
 	}
 }
+
+//===============================================================================================
+// Sprite Interactive Prototype
+// Button types:
+// 0 -> common button, the function "onClick" is called when clicked on this button.
+// 1 -> select button, the function "onClick" is called when a new value is selected.
+// 2 -> text input, the function "onClick" is called when "Ok" (Enter) is pressed.
+//===============================================================================================
+function Sprite_InteractiveP () {
+	this.initialize.apply(this, arguments);
+}
+
+Sprite_InteractiveP.prototype = Object.create(Sprite_Button.prototype);
+Sprite_InteractiveP.prototype.constructor = Sprite_InteractiveP;
+
+function SI_Button(Data){
+	this.initMembers.apply(this, arguments);
+}
+
+SI_Button.prototype = Object.create(null);
+SI_Button.prototype.constructor = SI_Button;
+
+SI_Button.prototype.initMembers = function(Data){
+	var typeOptions = [0, 1, 2];
+	var designOptions = ['rect', 'round'];
+	var filterOptions = ['number', 'letter', 'alphanum'];
+	this.symbol = Data.symbol || '';
+	this.type = typeOptions.contains(Data.type) ? Data.type : 0;
+	this.text = Data.text || '';
+	this.fontSize = Data.fontSize || 0;
+	this.textOffset = Data.textOffset ? Data.textOffset.length > 1 ? Data.textOffset : Data.textOffset.concat([0]) : [0, 0];
+	this.textColor = Data.textColor || '#FFFFFF';
+	this.x = Data.x || 0;
+	this.y = Data.y || 0;
+	this.width = Data.width || 0;
+	this.height = Data.height || 0;
+	this.borderSize = Data.borderSize || 2;
+	this.borderColor = Data.borderColor || '#FFFFFF';
+	this.backColor = Data.backColor || 'rgba(0,0,0,0.5)';
+	this.img = Data.img || null;
+	this.enabled = Data.enabled || true;
+	this.onClick = Data.onClick || '';
+	this.bind = Data.bind || '';
+	this.selectedValue = Data.selectedValue || '';
+	this.lastValue = Data.lastValue || '';
+	//only type 0
+	this.design = designOptions.contains(Data.design) ? Data.design : 'rect';
+	//only type 1
+	this.options = Data.options || ['Empty'];
+	this.open = Data.open  || false;
+	//only type 2
+	this.cursorIndex = Data.cursorIndex || 0;
+	this.maxDigits = Data.maxDigits || 10;
+	this.valueFilter = filterOptions.contains(Data.valueFilter) ? Data.valueFilter : '';
+	this.allowSpace = Data.allowSpace === undefined ? true : Data.allowSpace;
+	this.allowPaste = Data.allowPaste === undefined ? true : Data.allowPaste;
+}
+
+SI_Button.prototype.acceptInput = function(keyCode, specialKeys){
+	var filter = this.valueFilter;
+	if (!filter) return true;
+	if (filter === 'number'){
+		if (!(specialKeys.shift || specialKeys.ctrl || specialKeys.alt) && keyCode >= 48 && keyCode <= 57){
+			return true;
+		}
+	} else if (filter === 'letter'){
+		if (!(specialKeys.ctrl || specialKeys.alt) && keyCode >= 65 && keyCode <= 90){
+			return true;
+		}
+	} else if (filter === 'alphanum'){
+		if (keyCode >= 48 && keyCode <= 57) {
+			if(!(specialKeys.shift || specialKeys.ctrl || specialKeys.alt)){
+				return true;
+			}
+		} else if (keyCode >= 65 && keyCode <= 90){
+			if(!(specialKeys.ctrl || specialKeys.alt)){
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+SI_Button.prototype.acceptPasteValue = function(str){
+	if (!this.allowPaste) return false;
+	var filter = this.valueFilter;
+	var checkSpace = !this.allowSpace;
+	if (!filter && checkSpace) return true;
+	var keyCode;
+	for (var v = 0; v < str.length; v++){
+		keyCode = str.charCodeAt(v);
+		if (filter){
+			if (filter === 'number'){
+				if (!(keyCode >= 48 && keyCode <= 57)){
+					return false;
+				}
+			} else if (filter === 'letter'){
+				if (!(keyCode >= 65 && keyCode <= 90) && !(keyCode >= 97 && keyCode <= 122)){
+					return false;
+				}
+			} else if (filter === 'alphanum'){
+				if (!(keyCode >= 48 && keyCode <= 57) && !(keyCode >= 65 && keyCode <= 90) &&
+					!(keyCode >= 97 && keyCode <= 122)){
+					return false;
+				}
+			}
+		}
+		if (!checkSpace){
+			if (keyCode === 32){
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+SI_Button.prototype.moveCursor = function(value){
+	if (this.type === 2 && this._container){
+		this._container.moveCursorSprite(value);
+	}
+}
+
+SI_Button.prototype.redraw = function(){
+	if (this._container && this._container.bitmap){
+		var x = this.x - this._container.bitmap.x;
+		var y = this.y - this._container.bitmap.y;
+		this._container.bitmap.clearRect(x, y, this.width, this.height);
+		this._container.drawButton(this);
+	}
+}
+
+Sprite_InteractiveP.prototype.initialize = function(){
+	Sprite_Button.prototype.initialize.call(this);
+	this._buttons = {};
+	this._bIndex = 0;
+	this._waitInput_Button = null;
+	this._textInput_Button = null;
+	this._callOnClick = true;
+	this._cancelClick = false;
+	this._movable = true;
+	this._grabSpot = null;
+	this._grabBox = null;
+	this.setClickHandler(this.onClick.bind(this));
+}
+
+Sprite_InteractiveP.prototype.onClick = function(){
+	if (this._cancelClick) {
+		this._cancelClick = false;
+		return;
+	}
+	var symbol = this.getButtonOnClick();
+	if (!symbol) {
+		if (this._waitInput_Button && !this.isGrabbing()){
+			this._waitInput_Button = null;
+			SoundManager.playCancel();
+		}
+		return;
+	};
+
+	var button = this._buttons[symbol];
+	if (button && button.enabled){
+		if (button['defaultCode']){
+			button['defaultCode'](symbol);
+		}
+		if (button['onClick'] && this._callOnClick){
+			if (button.bind){
+				var bond = this._buttons[button.bind];
+				if (bond){
+					button['onClick'](bond.selectedValue);
+				}
+			} else {
+				button['onClick'](button.selectedValue);
+			}
+		}
+		this._callOnClick = true;
+	} else {
+		SoundManager.playBuzzer();
+	}
+}
+
+Sprite_InteractiveP.prototype.getButtonOnClick = function(){
+	var symbol, b;
+	var x = TouchInput._x;
+	var y = TouchInput._y;
+
+	if (this._waitInput_Button){//If a "select" input is open
+		symbol = this._waitInput_Button.symbol;
+		b = this._buttons[symbol];
+		var w = b.x + b.width;
+		var h = b.y + b.height * (b.options.length + 1);
+		var index = -1;
+		if (x >= b.x && x <= w && y >= b.y && y <= h){
+			index = Math.floor((y - b.y)/b.height) - 1;
+		}
+		this._buttons[symbol].selectedValue = b.options[index] || b.selectedValue;
+		return symbol;
+	} else {//Common buttons
+		var buttons = this._buttons;
+		for (symbol in buttons){
+			b = buttons[symbol];
+			if (!b){
+				continue;
+			}
+			if (x >= b.x && x <= (b.x + b.width) && y >= b.y && y <= (b.y + b.height)){
+				return symbol;
+			}
+		}
+	}	
+	return '';
+}
+
+Sprite_InteractiveP.prototype.addButton = function(Button){
+	var type = Object.prototype.toString.call(Button);
+	if (!Button || type != '[object Object]') return;
+	var padding = 4;
+
+	Button = new SI_Button(Button);
+
+	if (!Button.symbol){
+		Button.symbol = 'button' + this._bIndex;
+		this._bIndex++;
+	}
+
+	if (!Button.fontSize){
+		Button.fontSize = this.bitmap ? this.bitmap.fontSize : 15;
+	}
+
+	if (!Button.width){
+		Button.width = this.getButtonDefWidth(Button.text, Button.fontSize);
+		//Extra space for the arrow on "select" buttons
+		if (Button.type === 1){
+			Button.width += 25;
+		}
+	}
+
+	if (!Button.height){
+		Button.height = Button.fontSize + padding * 2;
+	}
+
+	/*while (Button.textOffset.length < 2){
+		Button.textOffset.push(0);
+	}*/
+
+	Button._container = this;
+
+	Button.defaultCode = this.getDefaultCode(Button.type);
+
+	Button.x += this.x;
+	Button.y += this.y;
+	
+	if (Button.type === 1){
+		Button.selectedValue = Button.selectedValue === '' ? Button.options[0] : Button.selectedValue;
+		Button.lastValue = Button.lastValue === '' ? Button.selectedValue : Button.lastValue;
+	}
+
+	this._buttons[Button.symbol] = Button;
+}
+
+Sprite_InteractiveP.prototype.deleteButton = function(symbol){
+	if (this._waitInput_Button && this._waitInput_Button.symbol === symbol){
+		this._waitInput_Button = null;
+	}
+	if (this._buttons[symbol]) {
+		delete this._buttons[symbol];
+		this.refresh();
+	}
+}
+
+Sprite_InteractiveP.prototype.update = function(){
+	this.updateGrabbing();
+	Sprite_Button.prototype.update.call(this);
+	//Select input (list)
+	if (this._waitInput_Button){
+		if (TouchInput.isCancelled() || Input.isTriggered('cancel') || 
+			(TouchInput.isTriggered() && !this.isClickOnMe())){
+			this.onClick();
+		}
+	//Text input
+	} else if (this._textInput_Button){
+		if (TouchInput.isCancelled() || Input.isTriggered('cancel') 
+			|| TouchInput.isTriggered() || Input.isTriggered('ok')){
+			if (Input.isTriggered('ok') && this._textInput_Button.onClick){
+				this._textInput_Button.onClick(this._textInput_Button.selectedValue);
+			}
+			this._textInput_Button._isCursor = false;
+			this._textInput_Button = null;
+			Sprite_InteractiveP._typing = false;
+			Sprite_InteractiveP._button = null;
+			Sprite_InteractiveP.loadDefaultKeyCodes();
+			this.deleteButtonCursor();
+			this.refresh();
+		} else if (Input.isRepeated('left')){
+			this.moveCursorSprite(-1);
+		} else if (Input.isRepeated('right')){
+			this.moveCursorSprite(1);
+		}
+		this.updateTextInput();
+	}
+}
+
+Sprite_InteractiveP.prototype.isClickOnMe = function(){
+	var x = TouchInput._x;
+	var y = TouchInput._y;
+	if (x >= this.x && x <= this.x + this.width && y >= this.y && y <= this.y + this.height){
+		return true;
+	}
+	return false;
+};
+
+Sprite_InteractiveP.prototype.createCursorSprite = function(Button){
+	if (!this._cursor && Button){
+		this._cursor = new Sprite(new Bitmap(2, Button.height - Button.borderSize * 2 - 4));
+		this._cursor._fadeState = 0;
+		this._cursor._fadeCounter = 0;
+		var fadeWait = 30;
+		var x = Button.x - this.x;
+		var y = Button.y - this.y;
+		this._cursor.update = function(){
+			Sprite.prototype.update.call(this);
+			if (this._fadeState){
+				if (this.alpha >= 1){
+					this._fadeCounter++;
+					if (this._fadeCounter >= fadeWait){
+						this._fadeCounter = 0;
+						this._fadeState = 0;
+					}
+				} else {
+					this.alpha += 0.05;
+				}
+			} else {
+				if (this.alpha <= 0){
+					this._fadeCounter++;
+					if (this._fadeCounter >= fadeWait - 20){
+						this._fadeCounter = 0;
+						this._fadeState = 1;
+					}
+				} else {
+					this.alpha -= 0.05;
+				}
+			}
+		}
+		this._cursor.bitmap.fillRect(0, 0, 2, this._cursor.bitmap.height, '#FFFFFF');
+		Button.cursorIndex = Button.selectedValue.length;
+		var textWidth = this.getButtonDefWidth(Button.selectedValue, Button.fontSize, true);
+		var maxX = x + Button.width - Button.borderSize - 4;
+		this._cursor.x = Math.min(x + Button.borderSize + 2 + textWidth, maxX);
+		this._cursor.y = y + Button.borderSize + 2;
+		this.addChild(this._cursor);
+	}
+}
+
+Sprite_InteractiveP.prototype.deleteButtonCursor = function(){
+	if (this._cursor){
+		this.removeChild(this._cursor);
+		this._cursor = null;
+	}
+}
+
+Sprite_InteractiveP.prototype.moveCursorSprite = function(value){
+	if (this._cursor){
+		value = value || 0;
+		var Button = this._textInput_Button;
+		var x = Button.x - this.x;
+		var y = Button.y - this.y;
+		var newIndex = Button.cursorIndex + value;
+		Button.cursorIndex = newIndex.clamp(0, Button.selectedValue.length);
+		var substr = Button.selectedValue.substr(0, Button.cursorIndex);
+		var textWidth = this.getButtonDefWidth(substr, Button.fontSize, true);
+		var maxX = x + Button.width - Button.borderSize - 4;
+		this._cursor.x = Math.min(x + Button.borderSize + 2 + textWidth, maxX);
+		this._cursor.alpha = 0.9;
+		this._cursor._fadeState = 1;
+		this._cursor._fadeCounter = -10;
+	}
+}
+
+Sprite_InteractiveP.prototype.updateGrabbing = function(){
+	if (!this.isMovable()) return;
+	this._cancelClick = false;
+	if (this.isGrabbing() && !this._grabbing) return;
+	if (this.visible && (TouchInput.isTriggered() && this.isClickOnGrabBox()) || this.isGrabbing()){
+		if (TouchInput.isPressed()){
+			this._grabSpot = this._grabSpot || { x: TouchInput._x - this.x, y: TouchInput._y - this.y, lastX: this.x, lastY: this.y};
+			this._grabbing = true;
+			
+			var x = TouchInput._x - this._grabSpot.x;
+			var y = TouchInput._y - this._grabSpot.y;
+			this.x = x.clamp(-this.bitmap.width/2, Graphics.width - this.bitmap.width/2);
+			this.y = y.clamp(0, Graphics.height - this.bitmap.height/2);
+		} else {
+			this.onRelease(this._grabSpot);
+			this._grabSpot = null;
+		}
+	}
+};
+
+Sprite_InteractiveP.prototype.isClickOnGrabBox = function(){
+	if (this._grabBox){
+		var GB = this._grabBox;
+		var x = TouchInput._x;
+		var y = TouchInput._y;
+		var realX = this.x + GB.x;
+		var realY = this.y + GB.y;
+		if (x >= realX && x <= realX + GB.width && y >= realY && y <= realY + GB.height){
+			return true;
+		}
+	}
+	return false;
+}
+
+Sprite_InteractiveP.prototype.isClickOnButton = function(Button){
+	if (Button){
+		var x = TouchInput._x;
+		var y = TouchInput._y;
+		var b = Button;
+		if (x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height){
+			return true;
+		}
+	}
+	return false;
+}
+
+Sprite_InteractiveP.prototype.isGrabbing = function(){
+	return !!this._grabSpot;
+}
+
+Sprite_InteractiveP.prototype.onRelease = function(gs){
+	var b, moved;
+	moved = this.x != gs.lastX || this.y != gs.lastY;
+	this._grabbing = false;
+	if (moved){
+		for (var symbol in this._buttons){
+			b = this._buttons[symbol];
+			if (!b) {
+				continue;
+			}
+			b.x += this.x - gs.lastX;
+			b.y += this.y - gs.lastY;
+		}
+		this._cancelClick = true;
+		this.refresh();
+	}
+}
+
+Sprite_InteractiveP.prototype.getButtonDefWidth = function(text, fontSize, noPadding){
+	if (!this.bitmap) return 0;
+	if (!text) return 0;
+	var padding = noPadding ? 0 : 6;
+	var textWidth = SMO.AM.textWidthEx(text, fontSize, true) + padding * 2;
+	return Math.ceil(textWidth);
+}
+
+Sprite_InteractiveP.prototype.getDefaultCode = function(type){
+	if (type === 2){
+		return this.textInput.bind(this);
+	} else if (type === 1){
+		return this.selectInput.bind(this);
+	}
+	return '';
+}
+
+Sprite_InteractiveP.prototype.textInput = function(symbol){
+	if (!this._textInput_Button || (this._textInput_Button.symbol != symbol && this._buttons[symbol])){
+		Sprite_InteractiveP.getCustomKeyCodes();
+		Sprite_InteractiveP._button = this._buttons[symbol];
+		this._textInput_Button = this._buttons[symbol];
+		this._buttons[symbol]._isCursor = true;
+		this.createCursorSprite(this._buttons[symbol]);
+		Sprite_InteractiveP._typing = true;
+		this._callOnClick = false;
+		this.refresh();
+	}
+}
+
+Sprite_InteractiveP.prototype.selectInput = function(symbol){
+	if (this._waitInput_Button){
+		//Close the selecting box
+		this._buttons[symbol].open = false;
+		//Clear the selected button
+		this._waitInput_Button = null;
+		if (this._buttons[symbol].lastValue === this._buttons[symbol].selectedValue){
+			//Jump the "onClick" function
+			this._callOnClick = false;
+			SoundManager.playCancel();
+		}
+		this._buttons[symbol].lastValue = this._buttons[symbol].selectedValue;
+	} else {
+		//Open the selecting box
+		this._buttons[symbol].open = true;
+		//Jump the "onClick" function
+		this._callOnClick = false;
+		//Save the selected button
+		this._waitInput_Button = this._buttons[symbol];
+		SoundManager.playCursor();
+	}
+	this.refresh();
+}
+
+Sprite_InteractiveP.prototype.drawAllButtons = function(){
+	if (this.bitmap){
+		var Button, b;
+		for (b in this._buttons){
+			Button = this._buttons[b];
+			if (!Button){
+				continue;
+			}
+			this.drawButton(Button);
+		}
+	}
+}
+
+Sprite_InteractiveP.prototype.drawButton = function(Button){
+	var x, y, width, height, fx, fy, padding, allHeight, text, maxWidth;
+	x = Button.x - this.x;
+	y = Button.y - this.y;
+	width = Button.width;
+	height = Button.height;
+	fx = Button.textOffset[0];
+	fy = Button.textOffset[1];
+	this.bitmap.fontSize = Button.fontSize;
+	this.bitmap.textColor = Button.textColor;
+	padding = 5;
+	maxWidth = width - Button.borderSize * 2 - padding;
+	if (maxWidth < 6){
+		maxWidth = width - Button.borderSize * 2;
+	}
+	if (Button.type === 2){
+		var darker = false;
+		if (Button.selectedValue){
+			text = Button.selectedValue;
+		} else if (Button._isCursor){
+			text = '';
+		} else {
+			darker = true;
+			text = Button.text;
+		}
+		this.bitmap.drawRectS(x, y, width, height, Button.borderSize, Button.borderColor, Button.backColor, Button.img);
+		this.bitmap.drawText(text, x + Button.borderSize + 2 + fx, y + fy, maxWidth, height, 'left');
+		if (darker){
+			this.bitmap.fillRect(x + Button.borderSize, y + Button.borderSize, width - Button.borderSize * 2, height - Button.borderSize * 2, 'rgba(0,0,0,0.5)');
+		}
+	} else if (Button.type === 1){//"select" input type
+		if (Button.open){
+			allHeight = height * (Button.options.length + 1);
+			//Drawing background and arrow
+			this.bitmap.drawRectS(x, y, Button.width, allHeight, Button.borderSize, Button.borderColor, Button.backColor, Button.img);
+			this.bitmap.drawTriangleS(x + width - 15, y + 14, 15, Button.height - 16, 'up', '#FFFFFF');
+			//Drawing input options
+			for (var o = 0; o < Button.options.length; o++){
+				this.bitmap.fillRect(x + 4, y + height * (o + 1), width - 8, 1, 'rgba(255,255,255,0.5)');
+				this.bitmap.drawText(Button.options[o], x + padding + fx, y + height * (o + 1) + fy, maxWidth, height,'left');
+			}
+		} else {
+			//Drawing background and arrow
+			this.bitmap.drawRectS(x, y, width, height, Button.borderSize, Button.borderColor, Button.backColor, Button.img);
+			this.bitmap.drawTriangleS(x + width - 15, y + 8, 15, Button.height - 16, 'down', '#FFFFFF');
+		}
+		text = Button.selectedValue;
+		this.bitmap.drawText(text, x + Button.borderSize + padding + fx, y + fy, maxWidth, height, 'left');
+	} else {
+		if (Button.design === 'round'){
+			this.bitmap.drawRectSR(x, y, width, height, Button.borderSize, Button.borderColor, Button.backColor, Button.img);
+		} else {
+			this.bitmap.drawRectS(x, y, width, height, Button.borderSize, Button.borderColor, Button.backColor, Button.img);
+		}
+		this.bitmap.drawText(Button.text, x + Button.borderSize + padding + fx, y + fy, maxWidth, height, 'left');
+		//Turning it darker in case it's not enabled
+		if (!Button.enabled){
+			if (Button.design === 'round'){
+				this.bitmap.drawRectSR(x, y, width, height, 0, null, 'rgba(0,0,0,0.5)');
+			} else {
+				this.bitmap.fillRect(x, y, width, height, 'rgba(0,0,0,0.5)');						
+			}
+		}
+	}
+}
+
+Sprite_InteractiveP.prototype.setButtonAttribute = function(symbol, att, value){
+	if (this._buttons[symbol]){
+		this._buttons[symbol][att] = value;
+	}
+}
+
+Sprite_InteractiveP.prototype.show = function(){
+	this.setupSelectButtons();
+	this.visible = true;
+}
+
+Sprite_InteractiveP.prototype.setupSelectButtons = function(){
+	var symbol, b;
+	for (symbol in this._buttons){
+		b = this._buttons[symbol];
+		if (b.type === 1 && b['onClick']){
+			b['onClick'](b.selectedValue);
+		}
+	}
+}
+
+Sprite_InteractiveP.prototype.hide = function(){
+	this.visible = false;
+}
+
+Sprite_InteractiveP.prototype.isMovable = function(){
+	return this._grabBox && this._movable;
+}
+
+Sprite_InteractiveP.prototype.setMovable = function(state){
+	this._movable = state;
+}
+
+Sprite_InteractiveP.prototype.setGrabBox = function(x, y, width, height){
+	this._grabBox = {
+		x: x,
+		y: y,
+		width: width,
+		height: height
+	};
+}
+
+Sprite_InteractiveP.prototype.drawText = function(text, x, y, maxWidth, maxHeight, align){
+	if (this.bitmap){
+		this.bitmap.drawText(text, x, y, maxWidth, maxHeight, align);
+	}
+}
+
+Sprite_InteractiveP.prototype.refresh = function(){
+	if (this.bitmap){
+		this.bitmap.clear();
+		this.drawAllButtons();
+	}
+}
+
+Sprite_InteractiveP.PressedKeys = {};
+Sprite_InteractiveP._typing = false;
+Sprite_InteractiveP._button = null;
+
+//Document - On Paste
+Sprite_InteractiveP.onPaste = document.onpaste;
+document.onpaste = function (event){
+	if (Sprite_InteractiveP._typing){
+		var text = event.clipboardData.getData("Text");
+		if (text){
+			var SI = Sprite_InteractiveP;
+			var Button = SI._button;
+			var value = Button.selectedValue;
+			var maxEntries = Button.maxDigits ? Button.maxDigits - value.length : text.length;
+			fittingText = text.substr(0, maxEntries);
+			if (Button.acceptPasteValue(fittingText)){
+				var index = Button.cursorIndex;
+				var str1 = value.substr(0, index);
+				var str2 = value.substr(index);
+			
+				Button.selectedValue = str1 + fittingText + str2;
+				Button.redraw();
+				Button.moveCursor(fittingText.length);
+			}
+		}
+	} else if (Sprite_InteractiveP.onPaste) {
+		Sprite_InteractiveP.onPaste.call(this, event);
+	}
+}
+
+//KeyMapper - key handling
+Sprite_InteractiveP.DEFAULT_KEY_CODES = {};
+Sprite_InteractiveP.SPECIAL_KEY_CODES = {
+	8: 'backspace',
+	32: 'space',
+	35: 'end',
+	36: 'home',
+	46: 'delete',
+	186: 'ç',
+	187: '=',
+	188: ',',
+	189: '-',
+	190: '.',
+	191: ';',
+	192: '\'',
+	193: '/',
+	219: '´',
+	220: ']',
+	221: '[',
+	222: '~',
+	226: '\\'
+}
+
+Sprite_InteractiveP.SPECIAL_SIGNS = {
+	'54b': '¨',
+	219: '´',
+	'219b': '`',
+	222: '~',
+	'222b': '^'
+};
+
+Sprite_InteractiveP.getCustomKeyCodes = function(){
+	Sprite_InteractiveP.saveDefaultKeyCodes();
+	//Numbers
+	for (var c = 48; c < 58; c++){
+		Input.keyMapper[c] = String.fromCharCode(c);
+	}
+	//Letters - (uppercase 65 -> 90) - (lowercase 97 -> 122)
+	for (c = 65; c < 91; c++){
+		Input.keyMapper[c] = String.fromCharCode(c).toLowerCase();
+	}
+
+	for (c in Sprite_InteractiveP.SPECIAL_KEY_CODES){
+		Input.keyMapper[c] = Sprite_InteractiveP.SPECIAL_KEY_CODES[c];
+	}
+}
+
+Sprite_InteractiveP.saveDefaultKeyCodes = function(){
+	for(var k in Input.keyMapper){
+		Sprite_InteractiveP.DEFAULT_KEY_CODES[k] = Input.keyMapper[k];
+	}
+}
+
+Sprite_InteractiveP.loadDefaultKeyCodes = function(){
+	for(var k in Input.keyMapper){
+		if (Sprite_InteractiveP.DEFAULT_KEY_CODES[k]){
+			Input.keyMapper[k] = Sprite_InteractiveP.DEFAULT_KEY_CODES[k];
+		} else {
+			delete Input.keyMapper[k];
+		}
+	}
+	Sprite_InteractiveP.DEFAULT_KEY_CODES = {};
+}
+
+//-----------------------------------------------------------------------------------------------
+// Input
+
+Sprite_InteractiveP._Input__onKeyDown = Input._onKeyDown;
+Input._onKeyDown = function(event){
+	Sprite_InteractiveP._Input__onKeyDown.call(this, event);
+	if (Sprite_InteractiveP._typing){
+		var code = event.keyCode;
+		var key = event.key === ' ' ? 'space' : event.key;
+		var special = Sprite_InteractiveP.SPECIAL_KEY_CODES;
+		if ((code >= 48 && code <= 57) || (code >= 65 && code <= 90) || special[code]){
+			Sprite_InteractiveP.PressedKeys[code] = {key:key, shift:event.shiftKey, ctrl:event.ctrlKey, alt:event.altKey};
+		}
+	}
+}
+
+Sprite_InteractiveP._Input__onKeyUp = Input._onKeyUp;
+Input._onKeyUp = function(event) {
+	Sprite_InteractiveP._Input__onKeyUp.call(this, event);
+	var code = event.keyCode;
+	var key = event.key;
+	var special = Sprite_InteractiveP.SPECIAL_KEY_CODES;
+	if ((code >= 48 && code <= 57) || (code >= 65 && code <= 90) || special[code]){
+		delete Sprite_InteractiveP.PressedKeys[code];
+	}
+}
+
+Sprite_InteractiveP._lastSign =  {code:0, key:''};
+
+Sprite_InteractiveP.prototype.updateTextInput = function(){
+	var SI = Sprite_InteractiveP;
+	var Pressed = SI.PressedKeys;
+	for (var k in Pressed){
+		var char = Pressed[k].key;
+		var fakeChar = Input.keyMapper[k];
+		var fakeRepeat = false;
+		var specialKeys = {shift: Pressed[k].shift, ctrl: Pressed[k].ctrl, alt:Pressed[k].alt};
+		var sign;
+
+		if (char === 'Dead' && SI.SPECIAL_SIGNS[k]){
+			if (Input.isTriggered(fakeChar) && SI._lastSign.code != 0){
+				sign = Pressed[k].shift ? SI.SPECIAL_SIGNS[k + 'b'] :  SI.SPECIAL_SIGNS[k];
+				SI._lastSign.key += sign;
+				fakeRepeat = true;
+			} else if (Input.isTriggered(fakeChar)){
+				SI._lastSign.code = k;
+				sign = Pressed[k].shift ? SI.SPECIAL_SIGNS[k + 'b'] :  SI.SPECIAL_SIGNS[k];
+				SI._lastSign.key += sign;
+			}
+		} else {
+			SI._lastSign = {code:0, key:''};
+		}
+		
+		if (Input.isRepeated(fakeChar) || fakeRepeat){
+			var Button = SI._button;
+			var value = Button.selectedValue;
+			var index = Button.cursorIndex;
+			var maxDigits = Button.maxDigits;
+			var filter = Button.valueFilter;
+			var moveCursor = 0;
+			switch (char){
+			case 'Dead':
+				if (!filter && fakeRepeat && (!maxDigits || value.length < maxDigits)){
+					char = (!maxDigits || value.length + 1 < maxDigits) ? SI._lastSign.key : SI._lastSign.key[0];
+					var str1 = value.substr(0, index);
+					var str2 = value.substr(index);
+					Button.selectedValue = str1 + char + str2;
+					SI._lastSign = {code:0, key:''};
+					moveCursor = char.length;
+				}
+				break;
+			case 'Backspace':
+				index -= 1;
+				moveCursor = -1;
+			case 'Delete':
+				var str1 = value.substr(0, index);
+				var str2 = value.substr(index + 1);
+				Button.selectedValue = str1 + str2;
+				break;
+			case 'space':
+				if ((!maxDigits || value.length < maxDigits) && Button.allowSpace){
+					var str1 = value.substr(0, index);
+					var str2 = value.substr(index);
+					Button.selectedValue = str1 + ' ' + str2;
+					moveCursor = 1;
+				}
+				break;
+			case 'Home':
+				moveCursor -= value.length;
+				break;
+			case 'End':
+				moveCursor = value.length;
+				break;
+			default:
+				if (!Pressed[k].ctrl && (!maxDigits || value.length < maxDigits) 
+						&& Button.acceptInput(k, specialKeys)){
+					var str1 = value.substr(0, index);
+					var str2 = value.substr(index);
+					Button.selectedValue = str1 + char + str2;
+					moveCursor = 1;
+				}
+			}
+			Button.redraw();
+			Button.moveCursor(moveCursor);
+		}
+	}
+}
+
+//===============================================================================================
+// Edit Mode
+//===============================================================================================
+function SpriteI_EditAchievs () {
+	this.initialize.apply(this, arguments);
+}
+
+SpriteI_EditAchievs.prototype = Object.create(Sprite_InteractiveP.prototype);
+SpriteI_EditAchievs.prototype.constructor = SpriteI_EditAchievs;
+
+SpriteI_EditAchievs.prototype.initialize = function(){
+	Sprite_InteractiveP.prototype.initialize.call(this);
+	var width = 200;
+	var height = 250;
+	this._isButtons = false;
+	this._selectedWindow = null;
+	this._undoData = [];
+	this._redoData = [];
+	this.bitmap = new Bitmap(width, height);
+	this.x = (Graphics.width - width)/2;
+	this.y = (Graphics.height - height)/2;
+	this.setGrabBox(0, 0, width, 60);
+	this.drawBody();
+	this.visible = false;
+}
+
+SpriteI_EditAchievs.prototype.turnBig = function(){
+	var oldWidth = this.bitmap.width;
+	var oldHeight = this.bitmap.height;
+	var newWidth = 300;
+	var newHeight = 350;
+	this.bitmap = new Bitmap(newWidth, newHeight);
+	var changeInX = this.bitmap.width - oldWidth;
+	var changeInY = this.bitmap.height - oldHeight;
+	
+	var newX = this._buttons['closeButton'].x + changeInX;
+	this.setButtonAttribute('closeButton', 'x', newX);
+
+	newX = this._buttons['selectWindow'].x + changeInX/2;
+	this.setButtonAttribute('selectWindow', 'x', newX);
+
+	this.refresh();
+}
+
+SpriteI_EditAchievs.prototype.drawBody = function(){
+	this.bitmap.clear();
+	this.bitmap.fontSize = 28;
+	this.bitmap.textColor = '#FFFFFF';
+	var width = this.bitmap.width;
+	var height = this.bitmap.height;
+	var backColor = 'rgba(0,0,0,1)';
+	var borderColor = '#FFFFFF';
+
+	//Window's body
+	this.bitmap.drawRectS(0, 0, width, height, 2, borderColor, backColor);
+
+	//Window's title
+	this.bitmap.fontSize = 15;
+	this.drawText('ACHIEVS\' EDITOR', 0, 28, width, 15, 'center');
+	this.bitmap.fontSize = 12;
+	this.drawText('version 0.2', 0, 44, width, 15, 'center');
+
+	//Data background
+	this._dataBox = {
+		x: 20,
+		y: 100,
+		width: width - 40,
+		height: height - 110
+	}
+	var box = this._dataBox;
+	this.refreshDataBox();
+
+	if (!this._isButtons){
+		//Lock
+		var lockButton = {
+			symbol:'lockButton',
+			text: '',
+			x:2,
+			y:2,
+			width: 20,
+			height: 20,
+			borderSize:1,
+			backColor:'#222222',
+			onClick: this._switchLockMode.bind(this)
+		}
+		this.addButton(lockButton);
+
+		//Undo
+		var undoButton = {
+			symbol:'undoButton',
+			text: 'UNDO',
+			x:22,
+			y:2,
+			width:36,
+			heigth:20,
+			borderSize:1,
+			backColor:'#222222',
+			enabled: this._undoData.length > 0,
+			onClick: this.undoLastAction.bind(this)
+		}
+		this.addButton(undoButton);
+
+		//Redo
+		var redoButton = {
+			symbol:'redoButton',
+			text: 'REDO',
+			x:58,
+			y:2,
+			width:36,
+			heigth:20,
+			borderSize:1,
+			backColor:'#222222',
+			enabled: this._redoData.length > 0,
+			onClick: this.redoLastAction.bind(this)
+		}
+		this.addButton(redoButton);
+	
+		//Close
+		var closeButton = {
+			symbol:'closeButton',
+			text: 'X',
+			y:2,
+			textOffset: [-1],
+			fontSize:12,
+			textColor:'rgba(255,50,50,1)',
+			borderColor:'#FF0000',
+			backColor:'rgba(255,0,0,0.5)',
+			onClick: this.hide.bind(this)
+		}
+		closeButton.x = Math.ceil(width - this.getButtonDefWidth(closeButton.text, closeButton.fontSize)) - 2;
+		this.addButton(closeButton);
+
+		
+		//Change width
+		var ChangeWidth = {
+			symbol: 'changeWidth',
+			type: 2,
+			text: 'Window Width',
+			fontSize: 15,
+			x: box.x + 10,
+			y: box.y + 80,
+			width: 140,
+			borderSize: 1,
+			backColor:'rgba(0,0,0,1)',
+			//valueFilter: 'number',
+			allowSpace: false,
+			maxDigits: 4,
+			onClick: console.log
+		}
+		this.addButton(ChangeWidth);
+
+		//Submit (binded with "Change width" button)
+		var submit = {
+			symbol: 'submit',
+			type: 0,
+			design: 'round',
+			text: 'submit',
+			fontSize: 15,
+			x: box.x + 50,
+			y: box.y + 110,
+			width: 60,
+			borderColor: '#000099',
+			backColor: '#3333FF',
+			bind: 'changeWidth',
+			onClick: this.changeWindowWidth.bind(this)
+		}
+		this.addButton(submit);//*/
+
+		//Select window
+		var categoryOptions = ['Select window', 'Categories', 'Trophies', 'Menu Title'];
+		var achievsOptions = ['Select window', 'Achievements', 'Menu Title', 'Achiev Info'];
+		var windowOptions = this.isCategory() ? categoryOptions : SMO.AM.Sort.enabled ? achievsOptions.push('Sort Option') : achievsOptions;
+		var SelectWindow = {
+			symbol:'selectWindow',
+			type:1,
+			text: 'Select window',
+			fontSize:15,
+			x: 30,
+			y: 68,
+			width:140,
+			borderSize:1,
+			backColor:'rgba(0,0,0,1)',
+			options: windowOptions,
+			onClick: this.selectWindow.bind(this)
+		}
+		this.addButton(SelectWindow);
+
+		this._isButtons = true;
+	}
+	this.drawAllButtons();
+
+	//Drawing lock circle - outside
+	this.bitmap.drawCircle(12, 12, 6, '#FFFFFF');
+	if (this.isMovable()){
+		//Inside
+		this.bitmap.drawCircle(12, 12, 4, '#222222');
+	}
+}
+
+SpriteI_EditAchievs.prototype.isCategory = function(){
+	return SMO.AM.categories.length > 0 && SMO.AM.currentCategory === 'none';
+}
+
+SpriteI_EditAchievs.prototype.selectWindow = function(value){
+	var scene = SceneManager._scene;
+	var itw = scene._itemWindow;
+	var trw = scene._trophiesWindow;
+	var tiw = scene._titleWindow;
+	var inw = scene._infoWindow;
+	var so = scene._sortOption || {};	
+	switch (value){
+	case 'Categories':
+		this._selectedWindow = itw;
+		itw.alpha = 1; trw.alpha = 0.5; tiw.alpha = 0.5;
+		break;
+	case 'Trophies':
+		this._selectedWindow = trw;
+		itw.alpha = 0.5; trw.alpha = 1; tiw.alpha = 0.5;
+		break;
+	case 'Menu Title':
+		this._selectedWindow = tiw;
+		itw.alpha = 0.5; trw.alpha = 0.5; tiw.alpha = 1; inw.alpha = 0.2; so.alpha = 0.5; inw._isWindow = false;
+		break;
+	case 'Achievements':
+		this._selectedWindow = itw;
+		itw.alpha = 1; tiw.alpha = 0.5; inw.alpha = 0.2; so.alpha = 0.5; inw._isWindow = false;
+		break;
+	case 'Achiev Info':
+		inw._isWindow = true;
+		this._selectedWindow = inw;
+		itw.alpha = 0.5; tiw.alpha = 0.5; inw.alpha = 1; so.alpha = 0.5;
+		break;
+	case 'Sort Option':
+		this._selectedWindow = so;
+		itw.alpha = 0.5; tiw.alpha = 0.5; so.alpha = 1; inw.alpha = 0.2; inw._isWindow = false;
+		break;
+	default:
+		this._selectedWindow = null;
+		itw.alpha = 1; trw.alpha = 1; tiw.alpha = 1; inw.alpha = 1; so.alpha = 1; inw._isWindow = true;
+	}
+	this.refreshDataBox()
+	SoundManager.playOk();
+}
+
+SpriteI_EditAchievs.prototype._switchLockMode = function(){
+	this._movable = !this._movable;
+	SoundManager.playCursor();
+	this.refresh();
+}
+
+SpriteI_EditAchievs.prototype.changeWindowWidth = function(value){
+	if (this._selectedWindow && value){
+		this._selectedWindow.width = value;
+	}
+}
+
+SpriteI_EditAchievs.prototype.update = function(){
+	if (Input.isTriggered('cancel') || TouchInput.isCancelled()){
+		if (!this._waitInput_Button){
+			this.hide();
+		}
+	}
+	Sprite_InteractiveP.prototype.update.call(this);
+	this.updateWindowGrabbing();
+	this.updateWindowMove();
+}
+
+SpriteI_EditAchievs.prototype.updateWindowGrabbing = function(){
+	if (!this._selectedWindow) return;
+	var w = this._selectedWindow;
+	if (this.isGrabbing() && !w._grabbing) return;
+	if ((TouchInput.isTriggered() && this.isClickOnWindow(w)) || this.isGrabbing()){
+		if (TouchInput.isPressed()){
+			this._grabSpot = this._grabSpot || { x: TouchInput._x - w.x, y: TouchInput._y - w.y, lastX: w.x, lastY: w.y };
+			w._grabbing = true;
+			var x = TouchInput._x - this._grabSpot.x;
+			var y = TouchInput._y - this._grabSpot.y;
+			w._lastX = w._lastX || x;
+			w._lastY = w._lastY || y;
+			if (w._lastX != x || w._lastY != y){
+				w.x = x;
+				w.y = y;
+				w._lastX = w.x;
+				w._lastY = w.y;
+				this.refreshDataBox();
+			}
+		} else {
+			this.onReleaseWindow(this._grabSpot, w);
+			this._grabSpot = null;
+		}
+	}
+}
+
+SpriteI_EditAchievs.prototype.updateWindowMove = function(){
+	if (this.isGrabbing()) return;
+	if (!this._selectedWindow) return;
+	if (this._textInput_Button) return;
+	var w = this._selectedWindow;
+	var moved = false;
+	var backup = [w.x, w.y];
+	if (Input.isRepeated('up')){
+		w.y--;
+		moved = true;
+	}
+	if (Input.isRepeated('left')){
+		w.x--;
+		moved = true;
+	}
+	if (Input.isRepeated('down')){
+		w.y++;
+		moved = true;
+	}
+	if (Input.isRepeated('right')){
+		w.x++;
+		moved = true;
+	}
+	if (moved){
+		if (this._undoData.length === 0 || this._undoData.last().type != 'preciseMove'){
+			this.addEditAction({
+				type:'preciseMove',
+				window: w,
+				lastValue: {x: backup[0], y: backup[1]},
+				newValue: {x: w.x, y: w.y}
+			})
+		} else if (this._undoData.last().type === 'preciseMove'){
+			this._undoData.last().newValue = {x: w.x, y: w.y};
+		}
+		this.refreshDataBox();
+	}
+}
+
+SpriteI_EditAchievs.prototype.isClickOnWindow = function(w){
+	if (w){
+		var x = TouchInput._x;
+		var y = TouchInput._y;
+		if (x >= w.x && x <= w.x + w.width && y >= w.y && y <= w.y + w.height){
+			return true;
+		}
+	}
+	return false;
+}
+
+SpriteI_EditAchievs.prototype.onReleaseWindow = function(gs, w){
+	if (gs){
+		var moved = w.x != gs.lastX || w.y != gs.lastY;
+		if (moved){
+			this.addEditAction({
+				type: 'move',
+				window: w,
+				lastValue: {x: gs.lastX, y: gs.lastY}, 
+				newValue: {x: w.x, y: w.y}
+			})
+		}
+	}
+	w._grabbing = false;
+	this.refresh();
+}
+
+SpriteI_EditAchievs.prototype.addEditAction = function(action, redo){
+	if (action){
+		this._undoData.push(action);
+		if (this._undoData.length > this.undoLimit()){
+			this._undoData.splice(0, 1);
+		}
+		this._redoData = [];
+		this.setButtonAttribute('undoButton', 'enabled', true);
+		this.setButtonAttribute('redoButton', 'enabled', false);
+	}
+}
+
+SpriteI_EditAchievs.prototype.undoLimit = function(){
+	return 5;
+}
+
+SpriteI_EditAchievs.prototype.undoLastAction = function(){
+	var data = this._undoData.last();
+	if (data){
+		switch(data.type){
+		case 'preciseMove':
+		case 'move':
+			data.window.x = data.lastValue.x;
+			data.window.y = data.lastValue.y;
+			break;
+		}
+		this._redoData.push(data);
+		this._undoData.splice(this._undoData.length - 1, 1);
+		if (this._undoData.length === 0){
+			this.setButtonAttribute('undoButton', 'enabled', false);
+		}
+		this.setButtonAttribute('redoButton', 'enabled', true);
+		SoundManager.playCursor();
+		this.refresh();
+	}
+}
+
+SpriteI_EditAchievs.prototype.redoLastAction = function(){
+	var data = this._redoData.last();
+	if (data){
+		switch(data.type){
+		case 'preciseMove':
+		case 'move':
+			data.window.x = data.newValue.x;
+			data.window.y = data.newValue.y;
+			break;
+		}
+		this._undoData.push(data);
+		this._redoData.splice(this._redoData.length - 1, 1);
+		if (this._redoData.length === 0){
+			this.setButtonAttribute('redoButton', 'enabled', false);
+		}
+		this.setButtonAttribute('undoButton', 'enabled', true);
+		SoundManager.playCursor();
+		this.refresh();
+	}
+}
+
+SpriteI_EditAchievs.prototype.refresh = function(){
+	var scene = SceneManager._scene;
+	if (scene._editMode){
+		this.drawBody();
+	} else {
+		this.hide();
+	}
+}
+
+SpriteI_EditAchievs.prototype.refreshDataBox = function(){
+	if (!this._dataBox) return;
+	var box = this._dataBox;
+	this.bitmap.clearRect(box.x, box.y, box.width, box.height);
+	this.bitmap.gradientFillRect(box.x, box.y, box.width, box.height, '#333333', '#111111', true);
+	if (this._selectedWindow){
+		var sw = this._selectedWindow;
+		this.bitmap.fontSize = 15;
+		this.drawText('X:' + sw.x, box.x + 4, box.y + 4, Math.floor(box.width/3 - 8), 15, 'left');
+		this.drawText('W:' + sw.width, box.x + 4, box.y + 4, box.width - 8, 15, 'center');
+		this.drawText('O:' + sw.opacity, box.x + 4, box.y + 4, box.width - 8, 15, 'right');
+		this.drawText('Y:' + sw.y, box.x + 4, box.y + 20, Math.floor(box.width/3 - 8), 15, 'left');
+		this.drawText('H:' + sw.height, box.x + 4, box.y + 20, box.width - 8, 15, 'center');
+		if (sw._windowskin){
+			var windowSkin = sw._windowskin._url.substr(sw._windowskin._url.lastIndexOf('/') + 1);
+			this.drawText('Skin: ' + windowSkin, box.x + 4, box.y + 40, box.width - 8, 15, 'left');
+		} else {
+			this.drawText('Skin: none', box.x + 4, box.y + 40, box.width - 8, 15, 'left');
+		}
+		var fontSize = sw.contents ? sw.contents.fontSize : sw.bitmap.fontSize;
+		var fontFace = sw.contents ? sw.contents.fontFace : sw.bitmap.fontFace;
+		this.drawText('Font Size: ' + fontSize, box.x + 4, box.y + 60, box.width - 8, 15, 'left');
+		this.drawText('Font Face: ' + fontFace, box.x + 4, box.y + 80, box.width - 8, 15, 'left');
+	}
+}
+
+SpriteI_EditAchievs.prototype.show = function(){
+	var scene = SceneManager._scene;
+
+	//Closing Sort option
+	if (scene._sortOption && scene._sortOption.visible && scene._sortOption._open){
+		scene._sortOption.onClick(scene._sortOption._selected);
+	}
+
+	//Starting edit mode
+	scene._editMode = true;
+
+	//Deactivating Item Window
+	if (scene._itemWindow){
+		if (!this.isCategory() && !scene._infoWindow.isOpen()){
+			scene._infoWindow.open();
+		}
+		scene._itemWindow.active = false;
+	}
+
+	Sprite_InteractiveP.prototype.show.call(this);
+	this.refresh();
+}
+
+SpriteI_EditAchievs.prototype.hide = function(){
+	this.clearSelectedStuff();
+	SoundManager.playCancel();
+	this.visible = false;
+}
+
+SpriteI_EditAchievs.prototype.clearSelectedStuff = function(){
+	var scene = SceneManager._scene;
+	//Ending edit mode
+	scene._editMode = false;
+	this._selectedWindow = null;
+
+	//Changing the windows' opacity
+	if (scene._itemWindow){
+		if (scene._infoWindow.isOpen()){
+			scene._infoWindow.close();
+		}
+		scene._itemWindow.active = true;
+		scene._itemWindow.alpha = 1;
+		scene._trophiesWindow.alpha = 1;
+		scene._titleWindow.alpha = 1;
+		scene._infoWindow._isWindow = true;
+		scene._infoWindow.alpha = 1;
+	}
+	if (scene._sortOption){
+		scene._sortOption.alpha = 1;
+	}
+}
+
+SpriteI_EditAchievs.prototype.onMenuChange = function(isCategory){
+	if (isCategory){
+		var selectOptions = ['Select window', 'Achievements', 'Menu Title', 'Achiev Info'];
+		if (SMO.AM.Sort.enabled){
+			selectOptions.push('Sort Option');
+		}
+		this.setButtonAttribute('selectWindow', 'options', selectOptions);
+		this.setButtonAttribute('selectWindow', 'selectedValue', 'Select window');
+	} else {
+		this.setButtonAttribute('selectWindow', 'options', ['Select window', 'Categories', 'Trophies', 'Menu Title']);
+		this.setButtonAttribute('selectWindow', 'selectedValue', 'Select window');
+	}
+	this.setButtonAttribute('undoButton', 'enabled', false);
+	this.setButtonAttribute('redoButton', 'enabled', false);
+	this._redoData = [];
+	this._undoData = [];
+}
+
 //===============================================================================================
 // Game Interpreter
 // Plugin commands
