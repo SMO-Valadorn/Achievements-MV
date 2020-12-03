@@ -1338,7 +1338,7 @@ SMO.AM.PopUp = {
   x: String(SMO.getParams['Pop Up X']),
   y: String(SMO.getParams['Pop Up Y']),
   width: String(SMO.getParams['Pop Up Width']),
-  height: String(SMO.getParams['Pop Up Heigth']),
+  height: String(SMO.getParams['Pop Up Height']),
   borderColor: SMO.getParams['Pop Up Borders'] || 'rgba(0,0,0,0)',
   preselect: 0,
   isClickTriggered: false
