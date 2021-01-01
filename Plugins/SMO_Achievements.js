@@ -1,4 +1,3 @@
-/// <reference path="SMO_Achievements.d.ts" />
 /*:
 * @plugindesc v1.03 - Creates an achievements mechanic.
 * @author SMO
@@ -1151,6 +1150,8 @@
 * @default "main = unlocked.concat(locked);\nmain.sort((a, b) => a.Name.localeCompare(b.Name, 'en', { sensitivity: 'base' }));"
 *
 */
+
+
 var Imported = Imported || {};
 var SMO = SMO || {};
 SMO.AM = {};
@@ -1178,18 +1179,20 @@ SMO.AM.trophies = {
   locked: [],
   unlocked: []
 }
-if (typeof require !== 'undefined' && typeof module != "undefined"
-  && typeof module.exports != "undefined") {
-  var { Bitmap, Input } = require('../rpg_core');
-  var { Game_System, Game_Player, Game_Interpreter } = require('../rpg_objects');
-  var { Window_Base, Window_Command } = require('../rpg_windows');
-  var { DataManager, SceneManager, ImageManager } = require("../rpg_managers");
-  var { Scene_Base, Scene_Load, Scene_Menu } = require('../rpg_scenes');
-  var { Window_MenuCommand } = require('../rpg_windows');
-  var { Sprite_Button } = require('../rpg_sprites');
-  var { PluginManager } = require("./FlossPicker");
+
+SMO.AM.Achievements = function () {
+  if (this.isGlobalRange) {
+    return this.GlobalAchievements;
+  } else {
+    return $gameSystem;
+  }
 }
 
+function Window_Achievements() {
+  this.initialize.apply(this, arguments);
+}
+
+Window_Achievements.prototype = Object.create(Window_Command.prototype);
 
 
 //===============================================================================================
@@ -1614,7 +1617,7 @@ Achievement_Data.prototype.isMyPopUpReady = function () {
 // Plugin Parameters
 //===============================================================================================
 
-if (PluginManager.parameters('AutoSaver') != undefined
+if (PluginManager.parameters('SMO_Achievements') != undefined
   && isEmpty(PluginManager._parameters['smo_achievements']) == false) {
   //Default Icons
   SMO.AM.Icons = {
@@ -1659,9 +1662,29 @@ if (PluginManager.parameters('AutoSaver') != undefined
 }
 
 
+SMO.AM.getData = function () {
+  if (PluginManager.parameters('SMO_Achievements') != undefined
+    && isEmpty(PluginManager._parameters['smo_achievements']) == false) {
+
+    var achievsData = JSON.parse(PluginManager._parameters['smo_achievements']['Achievements Data']);
+    var singularData, id;
+    var rejected = 0;
+    for (var d = 0; d < achievsData.length; d++) {
+      if (achievsData[d][0] === '{') {
+        singularData = JSON.parse(achievsData[d]);
+        id = d + 1 - rejected;
+        SMO.AM.Data.push(new Achievement_Data(id, singularData));
+      } else {
+        rejected++;
+      }
+    }
+  }
+};
+
+
 
 SMO.AM.getCategories = function () {
-  if (PluginManager.parameters('AutoSaver') != undefined
+  if (PluginManager.parameters('SMO_Achievements') != undefined
     && isEmpty(PluginManager._parameters['smo_achievements']) == false) {
     var data, image, needUpdate;
     var cat = PluginManager._parameters['smo_achievements']['Categories And Trophies'] ? JSON.parse(PluginManager._parameters['smo_achievements']['Categories And Trophies']) : [];
@@ -1733,26 +1756,6 @@ SMO.AM.getTexts = function () {
 
 
 
-SMO.AM.getData = function () {
-  if (PluginManager.parameters('AutoSaver') != undefined
-    && isEmpty(PluginManager._parameters['smo_achievements']) == false) {
-
-    var achievsData = JSON.parse(PluginManager._parameters['smo_achievements']['Achievements Data']);
-    var singularData, id;
-    var rejected = 0;
-    for (var d = 0; d < achievsData.length; d++) {
-      if (achievsData[d][0] === '{') {
-        singularData = JSON.parse(achievsData[d]);
-        id = d + 1 - rejected;
-        SMO.AM.Data.push(new Achievement_Data(id, singularData));
-      } else {
-        rejected++;
-      }
-    }
-  }
-};
-
-
 
 if (PluginManager.parameters('SMO_Achievements') != undefined
   && isEmpty(PluginManager._parameters['smo_achievements']) == false) {
@@ -1804,7 +1807,7 @@ if (PluginManager.parameters('SMO_Achievements') != undefined
 }
 
 SMO.AM.getSortOptions = function () {
-  if (PluginManager.parameters('AutoSaver') != undefined
+  if (PluginManager.parameters('SMO_Achievements') != undefined
     && isEmpty(PluginManager._parameters['smo_achievements']) == false) {
     this.Sort.options = [];
     var options = PluginManager._parameters['smo_achievements']['Sort Options'] ? JSON.parse(PluginManager._parameters['smo_achievements']['Sort Options']) : [];
@@ -2109,42 +2112,41 @@ SMO.AM.initializeGlobalAchievements = function () {
   }
 }
 
+//Get all the achievements on a specific category
+SMO.AM.getAchievsByCategory = function (category) {
+  var achievements;
+  if (this.Categories.length > 0) {
+    achievements = SMO.AM.Data.filter(function (d) {
+      return d && (d.category.split(',').contains(category));
+    });
+  }
+  return achievements || SMO.AM.Data;
+}
+
+var _StorageManager_localFilePath = StorageManager.localFilePath;
+StorageManager.localFilePath = function (savefileId) {
+  var filePath = _StorageManager_localFilePath.call(this, savefileId);
+  if (savefileId === -22) {
+
+    return this.localFileDirectoryPath() + 'achievements.rpgsave';
+  }
+  return filePath;
+};
+
+var _StorageManager_webStorageKey = StorageManager.webStorageKey;
+StorageManager.webStorageKey = function (savefileId) {
+  var storageKey = _StorageManager_webStorageKey.call(this, savefileId);
+  if (savefileId === -22) {
+    return 'Achievements';
+  }
+  return storageKey;
+};
+
 
 
 SMO.AM.saveGlobalAchievements = function () {
   var achievs = JSON.stringify(SMO.AM.GlobalAchievements);
-  var fs = require('fs');
-  var path = require('path');
-  var fileName = "Achievements.json";
-  var pathModule = require('path');
-  var dataDirectory = "data";
-  var saveDirectory = "save";
-  var wwwSaveDirectory = pathModule.join("www", "save");
-  var wwwDataDirectory = pathModule.join("www", "data");
-  if (fs.existsSync(dataDirectory) && fs.existsSync(saveDirectory)) {
-    achievs = btoa(achievs);
-    achievs = 'S' + achievs;
-    var dataFilePath = path.join(dataDirectory, fileName);
-    var saveFilePath = path.join(saveDirectory, fileName);
-    if (fs.existsSync(dataFilePath)) {
-      fs.rmSync(dataFilePath);
-    }
-    fs.writeFileSync(saveFilePath, achievs);
-  }
-  else if (fs.existsSync(wwwDataDirectory) && fs.existsSync(wwwSaveDirectory)) {
-    achievs = btoa(achievs);
-    achievs = 'S' + achievs;
-    var dataFilePath = path.join(wwwDataDirectory, fileName);
-    var saveFilePath = path.join(wwwSaveDirectory, fileName);
-    if (fs.existsSync(dataFilePath)) {
-      fs.rmSync(dataFilePath);
-    }
-    fs.writeFileSync(saveFilePath, achievs);
-  }
-  else {
-    console.error("No save directory located");
-  }
-
+  StorageManager.save(-22, achievs);
 }
 
 /**
@@ -2169,6 +2171,44 @@ function merge_options(loadedData, defaultData) {
 }
 
 
+Window_Achievements.prototype.constructor = Window_Achievements;
+
+Window_Achievements.prototype.initialize = function () {
+  var x = 0;
+  var y = 80;
+  this._data = [];
+  this._sortType = SMO.AM.Achievements().achievs.sortType;
+  Window_Command.prototype.initialize.call(this, x, y);
+  this.refreshUnlockedTrophies();
+}
+
+Window_Achievements.prototype.refreshUnlockedTrophies = function (forceSave) {
+  var all, unlocked, dataChanged = false;
+  for (var c = 0; c < SMO.AM.Categories.length; c++) {
+    if (SMO.AM.Achievements().trophies.locked.contains(c + 1)) {
+      all = SMO.AM.getAchievsByCategory(SMO.AM.Categories[c].name);
+      unlocked = all.filter(d => d.isUnlocked());
+      if (unlocked.length >= all.length) {
+        //Unlocking Trophy
+        dataChanged = true;
+        SMO.AM.Achievements().trophies.unlocked.push(c + 1);
+        SMO.AM.Achievements().trophies.locked.delete(c + 1);
+        if (SMO.AM.Categories[c].Trophy.onUnlock) {
+          try {
+            eval(SMO.AM.Categories[c].Trophy.onUnlock);
+          } catch (e) {
+            console.error('Error on trophy\'s unlock script (Trophy\'s name: ' + SMO.AM.Categories[c].name + ').');
+            console.error(e);
+          }
+        }
+      }
+    }
+  }
+  if (SMO.AM.isGlobalRange && (dataChanged || forceSave)) {
+    SMO.AM.saveGlobalAchievements();
+  }
+}
+
 /**
  * 
  * @param {String} text 
@@ -2176,8 +2216,6 @@ function merge_options(loadedData, defaultData) {
 SMO.AM.getGlobalAchievements = function (text) {
   SMO.AM.initializeGlobalAchievements();
   if (text && text.length != 0) {
-    text = text.replace('S', '');
-    text = atob(text);
     var loadedData = JSON.parse(text);
     this.GlobalAchievements = merge_options(loadedData, this.GlobalAchievements);
   } else {
@@ -2186,39 +2224,30 @@ SMO.AM.getGlobalAchievements = function (text) {
   SMO.AM.setupAchievements.call(SMO.AM.Achievements());
 }
 
+
+
 SMO.AM.loadGlobalAchievements = function () {
   if (SMO.AM.isGlobalRange == true) {
-    var fs = require("fs");
-    if (fs.existsSync("save/Achievements.json")) {
-      fetch("save/Achievements.json")
-        .then(response => response.text())
-        .then(text => SMO.AM.getGlobalAchievements(text))
-        .catch(err => console.log('Request Failed', err));
+
+    if (StorageManager.exists(-22)) {
+      var json = StorageManager.load(-22);
+      SMO.AM.getGlobalAchievements(json);
     }
     else {
-      fetch("data/Achievements.json")
-        .then(response => response.text())
-        .then(text => SMO.AM.getGlobalAchievements(text))
-        .catch(err => console.log('Request Failed', err));
+      SMO.AM.getGlobalAchievements("");
     }
-
   }
 };
 SMO.AM.loadGlobalAchievements();
-
 
 
 //-----------------------------------------------------------------------------------------------
 // Commands
 
 
-SMO.AM.Achievements = function () {
-  if (this.isGlobalRange) {
-    return this.GlobalAchievements;
-  } else {
-    return $gameSystem;
-  }
-}
+
+
+
 
 //Opening the new scene
 SMO.AM.showAchievements = function (category) {
@@ -2522,16 +2551,6 @@ SMO.AM.findAchievementByName = function (name) {
   return 0;
 }
 
-//Get all the achievements on a specific category
-SMO.AM.getAchievsByCategory = function (category) {
-  var achievements;
-  if (this.Categories.length > 0) {
-    achievements = SMO.AM.Data.filter(function (d) {
-      return d && (d.category.split(',').contains(category));
-    });
-  }
-  return achievements || SMO.AM.Data;
-}
 
 //===============================================================================================
 // Creating/updating data
@@ -3583,48 +3602,8 @@ Window_SceneName.prototype.refresh = function () {
 //===============================================================================================
 // Achievements Window
 //===============================================================================================
-function Window_Achievements() {
-  this.initialize.apply(this, arguments);
-}
 
-Window_Achievements.prototype = Object.create(Window_Command.prototype);
-Window_Achievements.prototype.constructor = Window_Achievements;
 
-Window_Achievements.prototype.initialize = function () {
-  var x = 0;
-  var y = 80;
-  this._data = [];
-  this._sortType = SMO.AM.Achievements().achievs.sortType;
-  Window_Command.prototype.initialize.call(this, x, y);
-  this.refreshUnlockedTrophies();
-}
-
-Window_Achievements.prototype.refreshUnlockedTrophies = function (forceSave) {
-  var all, unlocked, dataChanged = false;
-  for (var c = 0; c < SMO.AM.Categories.length; c++) {
-    if (SMO.AM.Achievements().trophies.locked.contains(c + 1)) {
-      all = SMO.AM.getAchievsByCategory(SMO.AM.Categories[c].name);
-      unlocked = all.filter(d => d.isUnlocked());
-      if (unlocked.length >= all.length) {
-        //Unlocking Trophy
-        dataChanged = true;
-        SMO.AM.Achievements().trophies.unlocked.push(c + 1);
-        SMO.AM.Achievements().trophies.locked.delete(c + 1);
-        if (SMO.AM.Categories[c].Trophy.onUnlock) {
-          try {
-            eval(SMO.AM.Categories[c].Trophy.onUnlock);
-          } catch (e) {
-            console.error('Error on trophy\'s unlock script (Trophy\'s name: ' + SMO.AM.Categories[c].name + ').');
-            console.error(e);
-          }
-        }
-      }
-    }
-  }
-  if (SMO.AM.isGlobalRange && (dataChanged || forceSave)) {
-    SMO.AM.saveGlobalAchievements();
-  }
-}
 
 Window_Achievements.prototype.update = function () {
   Window_Command.prototype.update.call(this);
@@ -6205,10 +6184,3 @@ Game_Interpreter.prototype.pluginCommand = function (command, args) {
 //===============================================================================================
 // END
 //===============================================================================================
-if (typeof require !== 'undefined' && typeof module != "undefined"
-  && typeof module.exports != "undefined") {
-  module.exports =
-  {
-    SMO
-  }
-}
