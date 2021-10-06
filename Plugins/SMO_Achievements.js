@@ -4330,7 +4330,7 @@ Game_Player.prototype.clearTransferInfo = function() {
 SMO.AM._GamePlayer_canMove = Game_Player.prototype.canMove;
 Game_Player.prototype.canMove = function() {
 	if (SceneManager._scene.isGrabbingSprite()) return false;
-	if (SceneManager._scene.selectedButton()) return false;
+	if (SceneManager._scene.isSelecting()) return false;
 	return SMO.AM._GamePlayer_canMove.call(this);
 };
 
@@ -4429,7 +4429,6 @@ Scene_Base.prototype.createSButtons = function() {
 	this.SButtons = {
 		_all: [],
 		_selected: null,
-		_triggering: null,
 		_grabbing: null,
 		_hovered: null,
 		_needSort: 'start',
@@ -4606,13 +4605,13 @@ Scene_Base.prototype.getButtonById = function(id) {
 };
 
 Scene_Base.prototype.isCallingTrigger = function() {
-	var button = this.SButtons._triggering;
-	return !!button && button.isButton();
+	var button = this.SButtons._hovered;
+	return !!button && button.isButton() && button._touching;
 };
 
 Scene_Base.prototype.isGrabAnySButton = function() {
-	var button = this.SButtons._triggering;
-	return !!button && !button.isButton();
+	var button = this.SButtons._hovered;
+	return !!button && !button.isButton() && button._touching;
 };
 
 Scene_Base.prototype.isTextInputSelected = function() {
@@ -4624,22 +4623,21 @@ Scene_Base.prototype.selectedButton = function() {
 	return this.SButtons ? this.SButtons._selected : null;
 };
 
-Scene_Base.prototype.selectButton = function(Button) {
-	var selected = this.SButtons._selected;
-	if (selected && selected != Button && selected.onDeselect) {
-		selected.onDeselect();
+Scene_Base.prototype.selectButton = function(new_selection, touch) {
+	var current_selection = this.SButtons._selected;
+	if (current_selection) {
+		if (current_selection === new_selection) {
+			return current_selection.onReselect();
+		} else {
+			this.SButtons._selected = null;
+			current_selection.onDeselect();
+		}
 	}
 
-	if (selected && selected === Button && selected.onReselect) {
-		return selected.onReselect();
+	this.SButtons._selected = new_selection || null;
+	if (new_selection) {
+		new_selection.onSelect(touch);
 	}
-
-	this.SButtons._selected = Button || null;
-	selected = this.SButtons._selected;
-	if (selected && selected.onSelect) {
-		selected.onSelect();
-	}
-	this._selecting = !!this.SButtons._selected;
 };
 
 Scene_Base.prototype.isHoverAnySButton = function() {
@@ -4660,33 +4658,68 @@ Scene_Base.prototype.update = function() {
 
 Scene_Base.prototype.updateSButtons = function() {
 	if (this instanceof Scene_Boot) return;
-	//Reorganizing buttons in case a new button was added
-	if (this.updateButtonsSort()) {
-		return;
+	if (this.isSButtonSorting()) return;
+	this.updateSButtonsHover();
+	//Updating button selection
+	if (this.isTriggeringSButton()) {
+		this.selectButton(this.SButtons._hovered);
 	}
-
-	if (!this.updateButtonsHover()) {
-		this.SButtons._hovered = null;
-	}
-	this.updateButtonsTrigger();
+	if (Input.isTriggered('tab')) {
+		if (Input.isPressed('shift')) {
+			this.selectPrevSButton();
+		} else {
+			this.selectNextSButton();
+		}
+	};
 	this.updateTextButtons();
 };
 
-Scene_Base.prototype.updateButtonsSort = function() {
-	if (!this.SButtons._needSort) return false;
-	//No need to sort on the first verification
-	if (this.SButtons._needSort === 'start') return this.SButtons._needSort = false;
+Scene_Base.prototype.selectPrevSButton = function() {
+	var buttons = this.getSButtons().filter(b => b.isButton() && b.isHoverEdible());
+	if (this.SButtons._selected) {
+		let index = buttons.indexOf(this.SButtons._selected);
+		if (index > 0) {
+			this.selectButton(buttons[index - 1], false);
+		} else {
+			this.selectButton(null);
+		}
+	} else if (buttons.length > 0) {
+		this.selectButton(buttons.last(), false);
+	}
+};
+
+Scene_Base.prototype.selectNextSButton = function() {
+	var buttons = this.getSButtons().filter(b => b.isButton() && b.isHoverEdible());
+	if (this.SButtons._selected) {
+		let index = buttons.indexOf(this.SButtons._selected);
+		if (index < buttons.length - 1) {
+			this.selectButton(buttons[index + 1], false);
+		} else {
+			this.selectButton(null);
+		}
+	} else if (buttons.length > 0) {
+		this.selectButton(buttons[0], false);
+	}
+};
+
+Scene_Base.prototype.isSButtonSorting = function() {
+	var SB = this.SButtons;
+	if (!SB._needSort) return false;
+	if (SB._needSort === 'start') return SB._needSort = false; //Scene start - No need to sort
 	this.getSButtons().forEach(function(Button) {
 		Button._needSort = true;
 	});
 	this.removeChild(this.buttonDescription());
-	this.SButtons._all = [];
-	this.SButtons._needSort = false;
+	SB._all = [];
+	SB._needSort = false;
 	return true;
 };
 
-Scene_Base.prototype.updateButtonsHover = function() {
-	if (this.isGrabbingSprite()) return false;
+Scene_Base.prototype.updateSButtonsHover = function() {
+	if (this.isGrabbingSprite()) {
+		this.SButtons._hovered = null;
+		return;
+	}
 	var Hovered = null;
 	var Button = null;
 	for (var b = this.getSButtons().length - 1; b > -1; b--) {	
@@ -4705,46 +4738,10 @@ Scene_Base.prototype.updateButtonsHover = function() {
 	if (Hovered) {
 		Hovered.setHover(true);
 		this.SButtons._hovered = Hovered;
+	} else {
+		this.SButtons._hovered = null;
 	}
 	return Hovered;
-};
-
-Scene_Base.prototype.updateButtonsTrigger = function() {
-	var Button;
-	//Checking buttons being triggered
-	if (this.isTriggeringSButton()) {
-		this.SButtons._triggering = this.SButtons._hovered;
-		this.selectButton(this.SButtons._hovered);
-	}
-
-	//Checking a button's activation
-	if (this.isCallingTrigger()) {
-		Button = this.SButtons._triggering;
-		if ((TouchInput.isReleased() || !Button.isMouseOverMe())) {
-			if (TouchInput.isReleased()) {
-				Button.onClick();
-			}
-			if (Button._touching) {
-				Button._touching = false;
-				Button.redrawBackground();
-			}
-			this.SButtons._triggering = null;
-		}
-	} else if (this.isGrabAnySButton()) {
-		if (this.isGrabbingSprite()) {
-			Button = this.grabbedSprite();
-			if (!Button._grabbed) {
-				this.grabSprite(null);
-				this.SButtons._triggering = null;
-				if (Button._touching) {
-					Button._touching = false;
-					Button.redrawBackground();
-				}
-			}
-		} else {
-			this.grabSprite(this.SButtons._triggering);
-		}
-	}
 };
 
 Scene_Base.prototype.updateTextButtons = function() {
@@ -4757,13 +4754,16 @@ Scene_Base.prototype.updateTextButtons = function() {
 Scene_Base.prototype.isTriggeringSButton = function() {
 	if (!TouchInput.isTriggered()) return false;
 	var Button = this.SButtons._hovered;
-	console.log(this.isSelecting() && (!Button || !Button.isOverrideSelect()))
 	if (this.isSelecting() && (!Button || !Button.isOverrideSelect())) {
 		this.selectButton(null);
 		return false;
 	}
-	if (!Button) return false;
-	if (!Button.isButton() && !Button.isClickOnMyGrabBox()) return false;
+	if (!Button || (!Button.isButton() && !Button.isClickOnMyGrabBox())) {
+		if (this.selectedButton()) {
+			this.selectButton(null);
+		}
+		return false;
+	}
 	return true;
 };
 
@@ -5648,15 +5648,17 @@ Scene_Achievements.prototype.createSortSprite = function() {
 	var opt = Data.options.map(o => o.symbol);
 	var sv = opt[$gameSystem.achievs.sortType];
 	var sortButton = {
+		id:'SOP',
 		x: eval(Data.x),
 		y: eval(Data.y),
 		options: opt,
 		width: eval(Data.width),
 		height: eval(Data.height),
-		value: sv,
+		value: [sv],
 		textOffset: [5, 0],
-		listLimit: 30,
-		backColor: 'rgba(0,0,0,0.8)'
+		listLimit: opt.length,
+		backColor: 'rgba(0,0,0,0.8)',
+		itemColors: ['rgba(0,0,0,0.8)', 'rgba(0,0,0,0.8)']
 	};
 
 	this._sortOption = new Sort_Option(sortButton);
@@ -5737,7 +5739,7 @@ Scene_Achievements.prototype.createWindowSelector = function() {
 		return '';
 	};
 	this._windowSelector.updateSelectedTone = function() {
-		if (this._grabbed || !this.visible) return this.alpha = 1;
+		if (this._touching || !this.visible) return this.alpha = 1;
 		if (this.glow) {
 			this.alpha -= 0.02;
 			if (this.alpha < 0.5) {
@@ -5956,7 +5958,7 @@ Scene_Achievements.prototype.createEditorEx = function() {
 	};
 	//Editor's list -> used to show data like weapons, armors and items
 	this._achievsEditorEx = EditorEx;
-	this._achievsEditorEx._list = new Sprite_ItemList(null, 200, 50);
+	this._achievsEditorEx._list = new Sprite_ItemList({}, 200, 50);
 	this._achievsEditorEx._list.bitmap.fontSize = 20;
 	this._achievsEditorEx.addChild(this._achievsEditorEx._list);
 	this.addChild(this._achievsEditorEx);
@@ -6116,8 +6118,8 @@ Scene_Achievements.prototype.createTextInputButton = function() {
 	this._textInputButton.visible = false;
 	this._textInputButton._fixedTone = true;
 	this._textInputButton._overrideState = true;
-	this._textInputButton.onSelect = function() {
-		SButton_Text.prototype.onSelect.call(this);
+	this._textInputButton.onSelect = function(touch) {
+		SButton_Text.prototype.onSelect.call(this, touch);
 		this.title.bitmap.clear();
 		this.title.bitmap.drawBorderedRect(0, 0, this.width, 35, 3, '#ffffff', '#111111');
 		this.title.bitmap.drawText(this.title.text, 0, 6, this.width, 22, 'center');
@@ -6258,7 +6260,6 @@ Scene_Achievements.prototype.restoreKeyMapper = function() {
 
 Scene_Achievements.prototype.onOk = function() {
 	if (this._warning.visible) return this.onWarnOk();
-	return this.onTextOk();
 };
 
 Scene_Achievements.prototype.onWarnOk = function() {
@@ -6287,12 +6288,6 @@ Scene_Achievements.prototype.onWarnOk = function() {
 	}
 
 	editor.closeWarning();
-};
-
-Scene_Achievements.prototype.onTextOk = function() {
-	this._achievsEditor._lastGeneric.value = this._textInputButton.value;
-	Scene_Achievements.prototype.onTextCancel.call(this);
-	this.selectButton(this._achievsEditor._lastGeneric);
 };
 
 Scene_Achievements.prototype.onContinue = function() {
@@ -8168,8 +8163,17 @@ Input.isQuickRepeated = function(keyName) {
 //==============================================================================================
 //==============================================================================================
 // Special buttons' parameters
+
+//The interval between two clicks to be considered a double click (in frames -> 1 sec == 60 frames)
+var DOUBLE_CLICK_INTERVAL = 24;
+
+//Desings for SButtons
+// rect -> rectangle
+// round-rect -> rectangle with rounded borders
+// circle -> perfect circle
 var SBUTTON_DESIGNS = ['rect', 'round-rect', 'circle'];
 
+//Basic parameters for all SButtons
 var SBUTTON_DEFAULT = {
 	x: 0,
 	y: 0,
@@ -8183,11 +8187,14 @@ var SBUTTON_DEFAULT = {
 	borderSize: 2,
 	borderColor: '#ffffff',
 	backColor: 'rgba(0,0,0,0)',
+	selectorColor: '#7777ff',
+	cursorStyle: '',
 	img: '', //Background image
 	hoverImg: '', //Background "on hover" image
 	clickImg: '', //Background "on click" image
 	hoverTone: 50,
 	disabledTone: -100,
+	hideSelect: false, //Borders don't change when this button is selected
 	enabled: true, //Button's initial state
 	enableFunc: '', //Function called every frame to determine if this button should be enabled/disabled
 	onClick: '', //Function called when the user clicks the button
@@ -8195,29 +8202,34 @@ var SBUTTON_DEFAULT = {
 	description: ''
 };
 
+//Extra parameters for "select" SButtons
 var SBUTTON_DEFAULT_SELECT = {
+	hoverColor: '#9696ff',
+	itemColors: null, //array -> [color1, color2]
+	scrollColors: null, //array -> [roller, background]
 	open: false,
 	options: null,
-	value: '',
+	value: null, //array
 	lastValue: '',
 	listLimit: 999,
-	selectorColor: '#7777ff',
-	precisionArrows: true,
+	precisionArrows: true, 
 	scrollArrows: true,
 	onOptChange: '',
 	onOptKeep: ''
 };
 
+//Filters for "text input" SButtons
 var SBUTTON_TEXT_FILTERS = ['number', 'letter', 'alphanum'];
 
+//Extra parameters for "text input" SButtons
 var SBUTTON_DEFAULT_TEXT = {
+	hoverColor: '#9696ff',
 	filter: null,
 	open: false,
 	options: null,
 	value: '',
 	lastValue: '',
 	listLimit: 5,
-	selectorColor: '#7777ff',
 	maxDigits: 0,
 	maxLines: 1,
 	minValue: 0,
@@ -8227,7 +8239,7 @@ var SBUTTON_DEFAULT_TEXT = {
 };
 
 //----------------------------------------------------------------------------------------------
-// Button Base
+// Button Base - Create
 //----------------------------------------------------------------------------------------------
 function SButton_Base() {//SMO buttons start //edit
 	this.initialize.apply(this, arguments);
@@ -8235,59 +8247,6 @@ function SButton_Base() {//SMO buttons start //edit
 
 SButton_Base.prototype = Object.create(Sprite.prototype);
 SButton_Base.prototype.constructor = SButton_Confirm;
-
-//========================================
-// Button Base - Initialize
-
-SButton_Base.prototype.initialize = function(data) {
-	Sprite.prototype.initialize.call(this);
-	this.initValues(data);
-	this.initPosition();
-	this.createMyBitmaps();
-	this.addListener('added', this.onParentAdded.bind(this));
-	this.addListener('removed', this.onParentRemoved.bind(this));
-	if (this.isReady()) {
-		this.onReady();
-	}
-};
-
-SButton_Base.prototype.initValues = function(data) {
-	data = data || {};
-	this.id = data.id != null ? data.id : '';
-	this.getDefaultData(data);
-	this._imgStates = [];
-	this._fixedTone = false;
-	this._hovered = false;
-	this._overrideSelect = false;
-	this._overrideState = false;
-	this._ready = false;
-	this.visible = false;
-};
-
-SButton_Base.prototype.getDefaultData = function(data) {
-	for (var k in SBUTTON_DEFAULT) {
-		if (data[k] == null) {
-			data[k] = SBUTTON_DEFAULT[k];
-		}
-	}
-
-	if (data.textOffset == null || !Array.isArray(data.textOffset)) {
-		data.textOffset = [0, 0];
-	}
-
-	if (!SBUTTON_DESIGNS.contains(data.design)) {
-		data.design = SBUTTON_DESIGNS[0];
-	}
-	this._data = data;
-};
-
-SButton_Base.prototype.createMyBitmaps = function() {
-	this.bitmap = new Bitmap(this._data.width, this._data.height);
-	this.txtChild = new Sprite(new Bitmap(this._data.width, this._data.height));
-	this.borders = new Sprite(new Bitmap(this._data.width, this._data.height));
-	this.addChild(this.txtChild);
-	this.addChild(this.borders);
-};
 
 Object.defineProperties(SButton_Base.prototype, {
 	enabled: {
@@ -8316,11 +8275,10 @@ Object.defineProperties(SButton_Base.prototype, {
 		},
 		set: function(value) {
 			value = value == null ? '' : String(value);
-			if (this._data.text === value) {
-				return;
+			if (this._data.text != value) {
+				this._data.text = value;
+				this.redrawMyText();
 			}
-			this._data.text = value;
-			this.redrawMyText();
 		}
 	},
 
@@ -8391,6 +8349,77 @@ Object.defineProperties(SButton_Base.prototype, {
 });
 
 //========================================
+// Button Base - Initialize
+
+SButton_Base.prototype.initialize = function(data) {
+	Sprite.prototype.initialize.call(this);
+	this.initValues(data || {});
+	this.initPosition();
+	this.initBitmaps();
+	this.addListener('added', this.onParentAdded.bind(this));
+	this.addListener('removed', this.onParentRemoved.bind(this));
+	this.checkReady();
+};
+
+SButton_Base.prototype.initValues = function(data) {
+	this.getDefaultData(data);
+	this._imgStates = [];
+	this._fixedTone = false;
+	this._hovered = false;
+	this._overrideSelect = false;
+	this._overrideState = false;
+	this._ready = false;
+	this.visible = false;
+};
+
+SButton_Base.prototype.getDefaultData = function(data) {
+	this.id = data.id != null ? data.id : '';
+	this._data = {};
+	for (var k in SBUTTON_DEFAULT) {
+		this._data[k] = data[k] != null ? data[k] : SBUTTON_DEFAULT[k];
+	}
+
+	if (!Array.isArray(this._data.textOffset)) {
+		this._data.textOffset = [];
+	}
+	if (this._data.textOffset.length < 2) {
+		this._data.textOffset[0] = this._data.textOffset[0] || 0;
+		this._data.textOffset[1] = this._data.textOffset[1] || 0;
+	}
+
+	if (!SBUTTON_DESIGNS.contains(this._data.design)) {
+		this._data.design = SBUTTON_DESIGNS[0];
+	}
+};
+
+SButton_Base.prototype.initPosition = function() {
+	this.x = this._data.x;
+	this.y = this._data.y;
+};
+
+SButton_Base.prototype.initBitmaps = function() {
+	this.bitmap = new Bitmap(this._data.width, this._data.height);
+	this.txtChild = new Sprite(new Bitmap(this._data.width, this._data.height));
+	this.borders = new Sprite(new Bitmap(this._data.width, this._data.height));
+	this.addChild(this.txtChild);
+	this.addChild(this.borders);
+};
+
+//Method - checkReady
+// * Checks if this button's images are loaded
+SButton_Base.prototype.checkReady = function() {
+	if (this.loadMyImages()) {
+		this._ready = true;
+		this.onReady();
+	}
+};
+
+SButton_Base.prototype.onReady = function() {
+	this.show();
+	this.drawMe();
+};
+
+//========================================
 // Button Base - Listeners
 
 SButton_Base.prototype.onParentAdded = function() {
@@ -8401,16 +8430,21 @@ SButton_Base.prototype.onParentAdded = function() {
 
 SButton_Base.prototype.onParentRemoved = function() {
 	this.hideDescription();
+	if (this.isSelected()) {
+		SceneManager._scene.selectButton(null);
+	}
 	SceneManager._scene.removeSButton(this);
 };
+
+//========================================
+// Button Base - Update
 
 SButton_Base.prototype.update = function() {
 	this.updateLoadState();
 	this.updateSort();
+	this.updateTouchTrigger();
 	Sprite.prototype.update.call(this);
-	if (this._parentFocused) {
-		return this._parentFocused = false;
-	}
+	if (this._parentFocused) return this._parentFocused = false;
 	if (this.isStateActive()) {
 		this.updateEnabledState();
 		this.updateHoverAndTone();
@@ -8419,14 +8453,27 @@ SButton_Base.prototype.update = function() {
 
 SButton_Base.prototype.updateLoadState = function() {
 	if (this._ready) return;
-	if (this.isReady()) return this.onReady();
+	this.checkReady();
 };
-
 
 SButton_Base.prototype.updateSort = function() {
 	if (this._needSort) {
 		SceneManager._scene.SButtons._all.push(this);
 		this._needSort = false;
+	}
+};
+
+SButton_Base.prototype.updateTouchTrigger = function() {
+	if (this._touching) {
+		if (TouchInput.isReleased() || !this.isMouseOverMe()) {
+			this._touching = false;
+			if (this._data.clickImg) {
+				this.redrawBackground();
+			}
+			if (TouchInput.isReleased()) {
+				this.onClick();
+			}
+		}
 	}
 };
 
@@ -8462,65 +8509,6 @@ SButton_Base.prototype.updateHoverAndTone = function() {
 };
 
 //========================================
-// Button Base - Position
-
-SButton_Base.prototype.realX = function() {
-	return -Sprite_Button.prototype.canvasToLocalX.call(this, 0);
-};
-
-SButton_Base.prototype.realY = function() {
-	return -Sprite_Button.prototype.canvasToLocalY.call(this, 0);
-};
-
-SButton_Base.prototype.initPosition = function() {
-	this.x = this._data.x;
-	this.y = this._data.y;
-};
-
-//========================================
-// Button Base - Click Handler
-
-SButton_Base.prototype.onClick = function() {
-	if (this.isEnabled()) {
-		this.onClickSuccess();
-	} else {
-		this.onClickFail();
-	}
-};
-
-SButton_Base.prototype.onClickSuccess = function() {
-	if (this._data.onClick) {
-		this._data.onClick(this._data.value);
-	}
-	this.parentFocus();
-};
-
-SButton_Base.prototype.onClickFail = function() {};
-
-//Method: "parentFocus"
-// * Once the player clicks on this button it's sprite will be placed above all other buttons on it's parent
-SButton_Base.prototype.parentFocus = function() {
-	if (!this.parent) return;
-	var buttons = SceneManager._scene.getSButtons();
-	var index = buttons.indexOf(this);
-	if (index < 0) return;
-	for (var b = buttons.length - 1; b > -1; b--) {
-		if (buttons[b].parent !== this.parent) {
-			continue;
-		}
-		//Find first button with same parent
-		if (b === index) return; //this button is already on the highest layer
-		//Set this button on the highest layer
-		var new_index = this.parent.getChildIndex(buttons[b]);
-		this.parent.setChildIndex(this, new_index);
-		SceneManager._scene.SButtons._needSort = true;
-		//Changing a child's index will cause the 'update' function to be called //edit -> is this really true after changing "childrenSwap" by "setChildIndex"?
-		//twice this frame, the variable below is used to prevent weird stuff from happening
-		return this._parentFocused = true;
-	}
-};
-
-//========================================
 // Button Base - Draw
 
 SButton_Base.prototype.drawMe = function() {
@@ -8531,7 +8519,6 @@ SButton_Base.prototype.drawMe = function() {
 };
 
 SButton_Base.prototype.drawBackground = function() {
-	var bmp = this.bitmap;
 	var data = this._data;
 	var width = this.width;
 	var height = this.height;
@@ -8542,18 +8529,18 @@ SButton_Base.prototype.drawBackground = function() {
 		var radius = Math.ceil(width / 2 - bds);
 		var x = Math.floor(width / 2);
 		var y = Math.floor(height / 2);
-		bmp.drawCircleBackground(x, y, radius, data.backColor, img);
+		this.bitmap.drawCircleBackground(x, y, radius, data.backColor, img);
 		break;
 	case 'round-rect':
 		var radius = Math.floor(Math.min(width, height) / 4) - bds;
 		if (radius > 0) {
 			width -= bds * 2;
 			height -= bds * 2;
-			bmp.drawRoundedRect(bds, bds, width, height, radius, data.backColor, img);
+			this.bitmap.drawRoundedRect(bds, bds, width, height, radius, data.backColor, img);
 			break;
-		}
+		} //else -> use default
 	default: //'rect'
-		bmp.drawRectBackground(0, 0, width, height, bds, data.backColor, img);
+		this.bitmap.drawRectBackground(0, 0, width, height, bds, data.backColor, img);
 		break;
 	}
 };
@@ -8566,7 +8553,7 @@ SButton_Base.prototype.drawBorders = function() {
 	var bmp = this.borders.bitmap;
 	var width = this.width;
 	var height = this.height;
-	var color = this.isSelected() && data.selectorColor ? data.selectorColor : data.borderColor;
+	var color = this.isSelected() && data.selectorColor && !data.hideSelect ? data.selectorColor : data.borderColor;
 	switch(data.design) {
 	case 'circle':
 		var radius = Math.ceil(width / 2);
@@ -8583,17 +8570,18 @@ SButton_Base.prototype.drawBorders = function() {
 };
 
 SButton_Base.prototype.drawMyText = function() {
-	if (!this.text) return;
 	if (!this.txtChild) return;
+	var bitmap = this.txtChild.bitmap;
+	if (!this.text) return bitmap.clear();
 	var data = this._data;
-	this.txtChild.bitmap.fontSize = data.fontSize;
-	this.txtChild.bitmap.textColor = data.textColor;
+	bitmap.fontSize = data.fontSize;
+	bitmap.textColor = data.textColor;
 	var x = data.textOffset[0] + data.borderSize;
 	var y = data.textOffset[1] + data.borderSize;
 	var maxWidth = this.txtChild.width - data.borderSize * 2;
 	var maxHeight = this.txtChild.height - data.borderSize * 2;
 	var align = data.textAlign;
-	this.txtChild.bitmap.drawText(this.text, x, y, maxWidth, maxHeight, align);
+	bitmap.drawText(this.text, x, y, maxWidth, maxHeight, align);
 };
 
 SButton_Base.prototype.refreshEnabledTone = function() {
@@ -8612,6 +8600,9 @@ SButton_Base.prototype.refreshEnabledTone = function() {
 		this.borders.setColorTone([deactTone, deactTone, deactTone, deactTone]);
 	}
 };
+
+//========================================
+// Button Base - Redraw
 
 SButton_Base.prototype.redraw = function() {
 	this.setColorTone([0, 0, 0, 0]);
@@ -8647,8 +8638,83 @@ SButton_Base.prototype.redrawMyText = function() {
 	this.refreshEnabledTone();
 };
 
-SButton_Base.prototype.resize = function(width, height) {
-	this.bitmap.resize(width, height);
+//========================================
+// Button Base - Select
+
+//Method - onSelect
+// * Called the moment the user clicks this button
+// * The selected button's borders become the color of "this._data.selectorColor"
+// * While the click is hold, the background image of this button will be "this._data.clickImg"
+// * After relasing the click, if the cursor was kept over the button, the function "onClick" will be called
+SButton_Base.prototype.onSelect = function(touch) {
+	this._touching = touch === undefined ? true : touch;
+	if (this._touching && this._data.clickImg) {
+		this.redrawBackground();
+	}
+	this.redrawBorders();
+};
+
+SButton_Base.prototype.onReselect = function() {
+	this._touching = true;
+	if (this._data.clickImg) {
+		this.redrawBackground();
+	}
+};
+
+//Method - onDeselect
+// * Called once the user clicks on another button, or anywhere else on the screen
+// * The button's borders return to their original color "this._data.borderColor"
+SButton_Base.prototype.onDeselect = function() {
+	this.redrawBorders();
+};
+
+SButton_Base.prototype.isSelected = function() {
+	return SceneManager._scene.selectedButton() === this;
+};
+
+//========================================
+// Button Base - Click Handler
+
+//Method - onClick
+// * Called once the click is released while the cursor is still over the button
+SButton_Base.prototype.onClick = function() {
+	if (this.isEnabled()) {
+		this.onClickSuccess();
+	} else {
+		this.onClickFail();
+	}
+};
+
+SButton_Base.prototype.onClickSuccess = function() {
+	if (this._data.onClick) {
+		this._data.onClick(this._data.value);
+	}
+	this.parentFocus();
+};
+
+SButton_Base.prototype.onClickFail = function() {};
+
+//Method - parentFocus
+// * Places this button at it's parent's the highest layer
+SButton_Base.prototype.parentFocus = function() {
+	if (!this.parent) return;
+	var buttons = SceneManager._scene.getSButtons();
+	var index = buttons.indexOf(this);
+	if (index < 0) return;
+	//Find the first button with the same parent
+	for (var b = buttons.length - 1; b > -1; b--) {
+		if (buttons[b].parent !== this.parent) {
+			continue;
+		}
+		if (b === index) return; //this button is already on the highest layer
+		//Set this button on the highest layer
+		var new_index = this.parent.getChildIndex(buttons[b]);
+		this.parent.setChildIndex(this, new_index);
+		SceneManager._scene.SButtons._needSort = true;
+		//Changing a child's index will cause the 'update' function to be called //edit -> is this really true after changing "childrenSwap" by "setChildIndex"?
+		//twice this frame, the variable below is used to prevent weird stuff from happening
+		return this._parentFocused = true;
+	}
 };
 
 //========================================
@@ -8671,15 +8737,6 @@ SButton_Base.prototype.onDisable = function() {
 //========================================
 // Button Base - Hover
 
-SButton_Base.prototype.setHover = function(hover) {
-	if (this._hovered === !!hover) return;
-	if (hover) {
-		this.onMouseHover();
-	} else {
-		this.onMouseLeave();
-	}
-};
-
 SButton_Base.prototype.checkHover = function() {
 	return this.isHoverEdible() && this.isMouseOverMe();
 };
@@ -8693,20 +8750,30 @@ SButton_Base.prototype.isMouseOverMe = function() {
 };
 
 SButton_Base.prototype.isXyInsideMe = function(x, y) {
-	x -= this.realX();
-	y -= this.realY();
+	x += Sprite_Button.prototype.canvasToLocalX.call(this, 0);
+	y += Sprite_Button.prototype.canvasToLocalY.call(this, 0);
 	var isInsideMyBox = x >= 0 && x < this.width && y >= 0 && y < this.height;
 	return isInsideMyBox && this.isXyFilled(x, y);
 };
 
-//Method: "isXyFilled"
-// * Returns a bool indicating if there's anything drawn on the given pixel
+//Method - isXyFilled
+// * Returns a boolean indicating if there's anything drawn on the given pixel
 SButton_Base.prototype.isXyFilled = function(x, y) {
-	return this.bitmap._context.getImageData(x, y, 1, 1).data[3];
+	return !!this.bitmap._context.getImageData(x, y, 1, 1).data[3];
 };
 
 SButton_Base.prototype.isHovered = function() {
 	return this._hovered;
+};
+
+SButton_Base.prototype.setHover = function(hover) {
+	hover = !!hover;
+	if (this._hovered === hover) return;
+	if (hover) {
+		this.onMouseHover();
+	} else {
+		this.onMouseLeave();
+	}
 };
 
 SButton_Base.prototype.onMouseHover = function() {
@@ -8714,6 +8781,9 @@ SButton_Base.prototype.onMouseHover = function() {
 	if (this._data.hoverImg) {
 		this.redrawBackground();
 	}
+	if (this._data.cursorStyle) {
+		document.body.style.cursor = this._data.cursorStyle;
+	};
 };
 
 SButton_Base.prototype.onMouseLeave = function() {
@@ -8721,52 +8791,35 @@ SButton_Base.prototype.onMouseLeave = function() {
 	if (this._data.hoverImg) {
 		this.redrawBackground();
 	}
-};
-
-//========================================
-// Button Base - Select
-
-SButton_Base.prototype.onSelect = function() {
-	this._selected = true;
-	if (this._data.clickImg) {
-		this._touching = true;
-		this.redrawBackground();
-	}
-};
-
-SButton_Base.prototype.onReselect = function() {
-	if (this._data.clickImg) {
-		this._touching = true;
-		this.redrawBackground();
-	}
-};
-
-SButton_Base.prototype.onDeselect = function() {
-	this._selected = false;
-};
-
-SButton_Base.prototype.isSelected = function() {
-	return this._selected;
+	if (this._data.cursorStyle) {
+		document.body.style.cursor = '';
+	};
 };
 
 //========================================
 // Button Base - Others
 
+SButton_Base.prototype.realX = function() {
+	return -Sprite_Button.prototype.canvasToLocalX.call(this, 0);
+};
+
+SButton_Base.prototype.realY = function() {
+	return -Sprite_Button.prototype.canvasToLocalY.call(this, 0);
+};
+
 SButton_Base.prototype.isActive = function() {
 	return this.parent && Sprite_Button.prototype.isActive.call(this);
 };
 
-// Method: "isButton"
-// Used to avoid using "instanceof" to differentiate a Button from a Grabbable Sprite
+// Method - isButton
+// * Used to avoid using "instanceof" to differentiate a Button from a Grabbable Sprite
 SButton_Base.prototype.isButton = function() {
 	return true;
 };
 
-//Method: "isReady"
-// * Returns true if all the button's images are loaded
-SButton_Base.prototype.isReady = function() {
-	return this._ready = this.loadMyImages();
-};
+SButton_Base.prototype.resize = function(width, height) {
+	this.bitmap.resize(width, height);
+};//edit -> bitmap principal editado, mas e quanto a sprite de texto? e as bordas?
 
 SButton_Base.prototype.loadMyImages = function(type) {
 	var name, prop, path, index, filename;
@@ -8791,11 +8844,6 @@ SButton_Base.prototype.loadMyImages = function(type) {
 		}
 	}
 	return !this._imgStates.some(i => i !== true);
-};
-
-SButton_Base.prototype.onReady = function() {
-	this.show();
-	this.drawMe();
 };
 
 //Method: "isOverrideSelect"
@@ -8852,9 +8900,14 @@ Sprite_Grabbable.prototype.initialize = function(Data) {
 // this._offScreen defines the % of this sprite that can go off screen
 // this._offScreen.x = 0; -> none of it may go off screen on X axis
 // this._offScreen.y = 1; -> all of it may go off screen on Y axis
+// For default, both "this._offScreen.x" and "this._offScreen.y" are set to 0.5
 
+//Method - setDragLimits
+// * Allows you to set fixed limits to dragging the sprite
+// * For example, you can make "xMin" and "xMax" have the same value so that this sprite
+//   won't move on he X axis, this is used to build lists' scrollers
 Sprite_Grabbable.prototype.setDragLimits = function(xMin, xMax, yMin, yMax) {
-	this._hasFixedXyLimits = xMin != null;
+	this._hasDraggingLimits = xMin != null || xMax != null || yMin != null || yMax != null;
 	xMin = xMin != null ? xMin : (-this.width * this._offScreen.x);
 	xMax = xMax != null ? xMax : (Graphics.width + this.width * (this._offScreen.x - 1));
 	yMin = yMin != null ? yMin : (-this.height * this._offScreen.y);
@@ -8865,7 +8918,7 @@ Sprite_Grabbable.prototype.setDragLimits = function(xMin, xMax, yMin, yMax) {
 
 //========================================
 // Sprite Grab - Grab Box
-// The box where the player may click to grab this sprite
+// The box where the user may click to grab this sprite
 
 Sprite_Grabbable.prototype.setFullGrabBox = function() {
 	this.setGrabBox(0, 0, this.width, this.height);
@@ -8893,14 +8946,36 @@ Sprite_Grabbable.prototype.isXyInsideMyGrabBox = function(x, y) {
 };
 
 //========================================
+// Sprite Grab - Select
+
+Sprite_Grabbable.prototype.onSelect = function(touch) {
+	this._touching = touch === undefined ? true : !!touch;
+	if (this._touching) {
+		SceneManager._scene.grabSprite(this);
+		if (this._data.clickImg) {
+			this.redrawBackground();
+		}
+	}
+	this.redrawBorders();
+};
+
+Sprite_Grabbable.prototype.onReselect = function() {
+	this.onSelect(true);
+};
+
+//========================================
+// Sprite Grab - Touch
+
+Sprite_Grabbable.prototype.updateTouchTrigger = function() {};
+
+//========================================
 // Sprite Grab - Grab
 
 Sprite_Grabbable.prototype.isGrabbed = function() {
-	return this._grabbed;
+	return this._touching;
 };
 
 Sprite_Grabbable.prototype.onGrab = function() {
-	this._grabbed = true;
 	this.parentFocus();
 	if (this._grabTone) {
 		var tone = this._grabTone;
@@ -8909,7 +8984,8 @@ Sprite_Grabbable.prototype.onGrab = function() {
 };
 
 Sprite_Grabbable.prototype.onRelease = function() {
-	this._grabbed = false;
+	this._touching = false;
+	SceneManager._scene.grabSprite(null);
 	if (this._grabTone) {
 		if (this.isHovered() && this._hoverTone) {
 			var tone = this._hoverTone;
@@ -8918,6 +8994,7 @@ Sprite_Grabbable.prototype.onRelease = function() {
 			this.setColorTone([0, 0, 0, 0]);
 		}
 	}
+	SceneManager._scene.selectButton(null);
 };
 
 Sprite_Grabbable.prototype.onMoved = function() {};
@@ -8948,12 +9025,11 @@ Sprite_Grabbable.prototype.update = function() {
 	if (this.isStateActive()) {
 		this.updateGrabbing();
 	} else {
-		this._grabbed = false;
+		this._touching = false;
 	}
 };
 
 Sprite_Grabbable.prototype.updateGrabbing = function() {
-	//Setting the movement
 	if (!this.isGrabbed()) return;
 	var scene = SceneManager._scene;
 	if (!TouchInput.isPressed() || !scene.isGrabbingSprite()) {
@@ -8966,7 +9042,7 @@ Sprite_Grabbable.prototype.updateGrabbing = function() {
 	var limitX2 = this._limitX.max;
 	var limitY1 = this._limitY.min;
 	var limitY2 = this._limitY.max;
-	if (this._hasFixedXyLimits) {
+	if (this._hasDraggingLimits) {
 		var rX = this.realX() - this.x;
 		var rY = this.realY() - this.y;
 		limitX1 += rX;
@@ -8977,8 +9053,8 @@ Sprite_Grabbable.prototype.updateGrabbing = function() {
 	x = x.clamp(limitX1, limitX2);
 	y = y.clamp(limitY1, limitY2);
 	if (x !== this._lastPosition.x || y !== this._lastPosition.y) {
-		var visual_x = this._hasFixedXyLimits ? rX : 0;
-		var visual_y = this._hasFixedXyLimits ? rY : 0;
+		var visual_x = this._hasDraggingLimits ? rX : 0;
+		var visual_y = this._hasDraggingLimits ? rY : 0;
 		this._lastPosition.x = x;
 		this._lastPosition.y = y;
 		this.x = x - visual_x;
@@ -8994,14 +9070,15 @@ Sprite_Grabbable.prototype.isButton = function() {
 	return false;
 };
 
-//If fixed, this sprite can't be moved, but can still be grabbed, which means
-//that the functions "onGrab" and "onRelease" will still be called
+//Method - isFixed
+// * If fixed, this sprite can't be moved, but can still be grabbed, which means
+//   that the functions "onGrab" and "onRelease" will still be called
 Sprite_Grabbable.prototype.isFixed = function() {
 	return this._fixed;
 };
 
 //----------------------------------------------------------------------------------------------
-// Confirm Button
+// Confirm Button - Create
 // * Used for common buttons like "Ok" and "Cancel"
 //----------------------------------------------------------------------------------------------
 function SButton_Confirm() {
@@ -9010,20 +9087,6 @@ function SButton_Confirm() {
 
 SButton_Confirm.prototype = Object.create(SButton_Base.prototype);
 SButton_Confirm.prototype.constructor = SButton_Confirm;
-
-SButton_Confirm.prototype.initialize = function(Data) {
-	SButton_Base.prototype.initialize.call(this, Data);
-	this.createMyTools();
-};
-
-SButton_Confirm.prototype.initValues = function(Data) {
-	SButton_Base.prototype.initValues.call(this, Data);
-	this._preventClickSE = false;
-	this._preventClickBlink = false;
-	this._descriptionCountLimit = 45;
-	this._descriptionCount = 0;
-	this._descriptionVisible = false;
-};
 
 Object.defineProperty(SButton_Confirm.prototype, 'description', {
 	get: function() {
@@ -9041,7 +9104,24 @@ Object.defineProperty(SButton_Confirm.prototype, 'description', {
 	configurable: true
 });
 
-SButton_Confirm.prototype.createMyTools = function() {};
+//========================================
+// Button Confirm - Initialize
+
+SButton_Confirm.prototype.initialize = function(data) {
+	SButton_Base.prototype.initialize.call(this, data);
+	this.initTools();
+};
+
+SButton_Confirm.prototype.initValues = function(data) {
+	SButton_Base.prototype.initValues.call(this, data);
+	this._preventClickSE = false;
+	this._preventClickBlink = false;
+	this._descriptionCountLimit = 45;
+	this._descriptionCount = 0;
+	this._descriptionVisible = false;
+};
+
+SButton_Confirm.prototype.initTools = function() {};
 
 //========================================
 // Button Confirm - On Click
@@ -9075,7 +9155,7 @@ SButton_Confirm.prototype.blinkOnClick = function() {
 };
 
 //========================================
-// Button Base - Update & Description
+// Button Confirm - Update & Description
 
 SButton_Confirm.prototype.update = function() {
 	if (SButton_Base.prototype.update.call(this) === false) return false;
@@ -9104,9 +9184,9 @@ SButton_Confirm.prototype.updateDescription = function() {
 };
 
 SButton_Confirm.prototype.showDescription = function() {
-	var last_button = SceneManager._scene.buttonDescription()._button;
-	if (last_button && last_button != this) {
-		last_button.hideDescription();
+	var last_description = SceneManager._scene.buttonDescription()._button;
+	if (last_description && last_description != this) {
+		last_description.hideDescription();
 	}
 
 	if (!this._descriptionVisible) {
@@ -9123,1278 +9203,9 @@ SButton_Confirm.prototype.hideDescription = function() {
 };
 
 //----------------------------------------------------------------------------------------------
-// Item List Button
-// * Creates a list of items from which it's possible to choose from
-//----------------------------------------------------------------------------------------------
-function Sprite_ItemList() {
-	this.initialize.apply(this, arguments);
-}
-
-Sprite_ItemList.prototype = Object.create(SButton_Base.prototype);
-Sprite_ItemList.prototype.constructor = Sprite_ItemList;
-
-Object.defineProperty(Sprite_ItemList.prototype, 'fontSize', {
-	get: function() {
-		return this.bitmap.fontSize;
-	},
-	set: function(value) {
-		if (this.bitmap.fontSize != value) {
-			this.bitmap.fontSize = value;
-			this.redraw();
-		}
-	},
-	configurable: true
-});
-
-Object.defineProperty(Sprite_ItemList.prototype, 'itemWidth', {
-	get: function() {
-		return this._itemWidth;
-	},
-	set: function(value) {
-		if (isNaN(value = Number(value)) && this._itemWidth !== value) {
-			this._itemWidth = value;
-			this.redraw();
-		}
-	},
-	configurable: true
-});
-
-Object.defineProperty(Sprite_ItemList.prototype, 'itemHeight', {
-	get: function() {
-		return this._itemHeight;
-	},
-	set: function(value) {
-		if (isNaN(value = Number(value)) && this._itemHeight !== value && value >= 0) {
-			this._itemHeight = value;
-			this.redraw();
-		}
-	},
-	configurable: true
-});
-
-Object.defineProperty(Sprite_ItemList.prototype, 'itemHeight', {
-	get: function() {
-		return this._itemHeight;
-	},
-	set: function(value) {
-		if (isNaN(value = Number(value)) && this._itemHeight !== value && value >= 0) {
-			this._itemHeight = value;
-			this.redraw();
-		}
-	},
-	configurable: true
-});
-
-Object.defineProperty(Sprite_ItemList.prototype, 'columns', {
-	get: function() {
-		return this._cols;
-	},
-	set: function(value) {
-		if (isNaN(value = Number(value)) && this._cols !== value && value >= 0) {
-			this._cols = value;
-			this.redraw();
-		}
-	},
-	configurable: true
-});
-
-Object.defineProperty(Sprite_ItemList.prototype, 'rows', {
-	get: function() {
-		return this._rows;
-	},
-	set: function(value) {
-		if (isNaN(value = Number(value)) && this._rows !== value && value >= 0) {
-			this._rows = value;
-			this.redraw();
-		}
-	},
-	configurable: true
-});
-
-//========================================
-// Sprite Item List - Create
-
-Sprite_ItemList.prototype.initialize = function(data, cols, rows) {
-	this._items = [];
-	this._cols = cols > 0 ? Number(cols) : 999;
-	this._rows = rows > 0 ? Number(rows) : 999;
-	SButton_Base.prototype.initialize.call(this, data);
-	this._itemWidth = Math.ceil((this._data.width - this._scroller_w) / this.columns - this._gap_col * (this.columns - 1));
-	//this._itemWidth = 68; //edit
-	this._itemHeight = 34;
-	this.createScroller();
-};
-
-Sprite_ItemList.prototype.initValues = function(data) {
-	SButton_Base.prototype.initValues.call(this, data);
-	this._scroller_w = 6;
-	this._selectedItems = [];
-	this._scrollX = 0;
-	this._scrollY = 0;
-	this._gap_row = 0;
-	this._gap_col = 0;
-	this._fixedTone = true;
-};
-
-Sprite_ItemList.prototype.createMyBitmaps = function() {
-	this.bitmap = new Bitmap(this._data.width, this._data.height);
-	this.bitmap.fontSize = this._data.fontSize;
-};
-
-Sprite_ItemList.prototype.createScroller = function() {
-	var x = this.width - this._scroller_w;
-	this._scroller = new Sprite(new Bitmap(this._scroller_w, this.height));
-	this._scroller.x = x;
-
-	roller = new Sprite_Grabbable({desing:'round-rect', borderSize:0});
-	roller.createMyBitmaps = function() {
-		this.bitmap = new Bitmap(1, 1);
-	};
-	roller.drawMe = function(width, height, radius, color) {
-		this.bitmap.drawRoundedRect(0, 0, width, height, radius, color);
-	};
-	roller.onMoved = function() {
-		Sprite_Grabbable.prototype.onMoved.call(this);
-		var gramps = this.parent.parent;
-		gramps.setScrollY(this.y * this._tick);
-	};
-	roller._fixedTone = true;
-	roller._tick = 0;
-	this._scroller._roller = roller;
-	this._scroller.addChild(this._scroller._roller);
-
-	this.addChild(this._scroller);
-};
-
-//========================================
-// Sprite Item List - Update
-
-Sprite_ItemList.prototype.update = function() {
-	SButton_Base.prototype.update.call(this);
-	this.updateIndexSelection();
-	this.updateMyTriggers();
-};
-
-Sprite_ItemList.prototype.updateMyTriggers = function() {
-	if (!this.isActive()) return;
-	var isTouchTriggered = TouchInput.isTriggered() && !this.isMouseOverScroller();
-	if (isTouchTriggered || Input.isTriggered('ok')) {
-		return this.onOkTriggered(isTouchTriggered);
-	}
-	if (Input.isTriggered('cancel') || TouchInput.isCancelled()) {
-		return this.deselectAllItems();
-	}
-	var ctrl = Input.isPressed('control');
-	var shift = Input.isPressed('shift');
-	if (Input.isRepeated('up')) {
-		return this.selectItemAbove(ctrl, shift);
-	}
-	if (Input.isRepeated('right')) {
-		return this.selectNextItem(ctrl, shift);
-	}
-	if (Input.isRepeated('down')) {
-		return this.selectItemBeneath(ctrl, shift);
-	}
-	if (Input.isRepeated('left')) {
-		return this.selectPreviousItem(ctrl, shift);
-	}
-};
-
-Sprite_ItemList.prototype.updateIndexSelection = function() {
-	if (!this.isHovered()) return;
-	if (!this.isMouseMoved()) return;
-	var hover_index = this.getHoverIndex();
-	if (hover_index === -1) {
-		this._hoverSelection = -1;
-		return;
-	}
-	this._lastHoverX = TouchInput._cX;
-	this._lastHoverY = TouchInput._cY;
-	this.hoverSelect(hover_index + this._scrollY);
-};
-
-Sprite_ItemList.prototype.hoverSelect = function(index) {
-	var isIndexAvailable = (index > -1 && index < this.items().length);
-	this._hoverSelection = isIndexAvailable ? index : -1;
-};
-
-Sprite_ItemList.prototype.updateCloseTrigger = function() {
-	var isTouchTriggered = TouchInput.isTriggered() && !this.isMouseOverScroller();
-	if (isTouchTriggered || Input.isTriggered('ok')) {
-		this.onOkTriggered(isTouchTriggered);
-	} else if (Input.isTriggered('cancel') || TouchInput.isCancelled()) {
-		this.deselectAllItems();
-	}
-};
-
-Sprite_ItemList.prototype.isMouseMoved = function() {
-	return this._lastHoverX != TouchInput._cX || this._lastHoverY != TouchInput._cY;
-};
-
-Sprite_ItemList.prototype.getHoverIndex = function() {
-	if (!this.isHovered()) return -1;
-	if (this._items.length === 0) return -1;
-	var tx = TouchInput._cX;
-
-	var index = this.getOptionIndexOnXy(TouchInput._cX, TouchInput._cY);
-	var maxIndex = this.items().length - 1;
-	return index.clamp(0, maxIndex);
-};
-
-Sprite_ItemList.prototype.getOptionIndexOnXy = function(x, y) {
-	var column, row;
-	var items = this.items();
-	if (!items.length) return -1;
-	x = x - this.realX() + this._scrollX;
-	y = y - this.realY() + this._scrollY;
-
-	if (this.columns < 2) {
-		column = 1;
-	} else {
-		let col_width = this.itemWidth + this._gap_col;
-		if (x > this._cols * col_width - this._gap_col) return -1; //Column out of range
-		if (x - Math.floor(x / col_width) * col_width > this.itemWidth) return -1; //Clicked on the gap
-		column = Math.ceil(x / col_width);
-	}
-
-	if (this.rows < 2) {
-		row = 1;
-	} else {
-		let row_width = this.itemHeight + this._gap_row;
-		if (y > this._rows * row_width - this._gap_row) return -1; //Row out of range
-		if (y - Math.floor(y / row_width) * row_width > this.itemHeight) return -1; //Clicked on the gap
-		row = Math.ceil(y / row_width);
-	}
-
-	return this._cols * (row - 1) + column - 1;
-};
-
-Sprite_ItemList.prototype.isMouseOverScroller = function() {
-	if (!this.isScroll()) return false;
-	var tx = TouchInput._x;
-	var ty = TouchInput._y;
-	var x1 = this.realX.call(this._scroller);
-	var x2 = x1 + this._scroller.width;
-	var y1 = this.realY.call(this._scroller);
-	var y2 = y1 + this._scroller.height;
-	return tx >= x1 && tx < x2 && ty >= y1 && ty < y2;
-};
-
-//========================================
-// Sprite Item List - Items' Management
-
-Sprite_ItemList.prototype.setItemList = function(list) {
-	list = list || [];
-	if (!Array.isArray(list)) {
-		console.warn('The given list is not an array.')
-		return;
-	}
-	var max = this.maxItems();
-	this._items = [];
-	for(var d = 0; d < list.length; d++) {
-		if (list[d]) {
-			if (list[d].name) {
-				this._items.push({text: list[d].name, iconIndex: list[d].iconIndex});
-			} else {
-				this._items.push({text: list[d], iconIndex: -2});
-			}
-		}
-		if (d + 1 > max) break;
-	}
-	this.redraw();
-};
-
-// Method "add"
-// * Adds an item to the list and redraws it *
-// String: text -> the item's text
-// String: imageName -> the image to be drawn as the item's body
-Sprite_ItemList.prototype.add = function(text, iconIndex, textColor, backColor, imageName) {
-	if (this._items.length >= this.maxItems()) return;
-	text = text || '';
-	iconIndex = iconIndex || -2;
-	textColor = textColor || '#ffffff';
-	backColor = backColor || '#000000';
-	imageName = imageName || '';
-	this.addItem({text, textColor, backColor, imageName});
-};
-
-// Method "addItem"
-// * Adds an item to the list and redraws it *
-// Object: item -> {text, textColor, backColor, imageName}
-Sprite_ItemList.prototype.addItem = function(item) {
-	this._items.push(item);
-	this.redraw();
-};
-
-Sprite_ItemList.prototype.items = function() {
-	return this._items;
-};
-
-Sprite_ItemList.prototype.getSelectedItems = function() {
-	var items = [];
-	for (var i = 0; i < this._selectedItems.length; i++) {
-		items.push(this.items()[this._selectedItems[i]].text);
-	}
-	return items;
-};
-
-Sprite_ItemList.prototype.deselectAllItems = function() {
-	if (!this.isAnyItemSelected()) return;
-	var selected = this._selectedItems.clone();
-	this._selectedItems = [];
-	for (var i = 0; i < selected.length; i++) {
-		this.redrawItem(selected[i]);
-	}
-};
-
-Sprite_ItemList.prototype.selectItem = function(index, ctrl) {
-	if (Array.isArray(index)) {
-		for (var i = 0; i < index.length; i++) {
-			if (Array.isArray(index[i])) {
-				continue;
-			}
-			this.selectItem(index[i], true);
-		}
-		return;
-	}
-	if (!(index > -1) || index >= this.items().length) return this.deselectAllItems();
-
-	if (this._selectedItems.contains(index)) {
-		//The item is already selected
-		if (ctrl) {
-			//Deselect item
-			this._selectedItems.splice(index, 1);
-			this.redrawItem(index);
-		} else if (this.isMultipleItemsSelected()) {
-			this.deselectAllItems();
-			this.selectItem(index);
-		}
-	} else {
-		//Select item
-		if (this.isAnyItemSelected() && !ctrl) {
-			this.deselectAllItems();
-		}
-		this._selectedItems.push(index);
-		this.redrawItem(index);
-		this.focusItem(index);
-	}
-};
-
-Sprite_ItemList.prototype.focusItem = function(index) {
-	if (!this.isScroll()) return;
-	var item_row = this.getItemRow(index);
-	var item_y = (this.itemHeight + this._gap_row) * (item_row - 1);
-	if (this._scrollY > item_y) {
-		this.setScrollY(item_y);
-		this._scroller._roller.y = this._scrollY / this._scroller._roller._tick;
-		return;
-	}
-
-	if (this._scrollY + this.height < item_y + this.itemHeight) {
-		this.setScrollY(item_y - this.height + this.itemHeight);
-		this._scroller._roller.y = this._scrollY / this._scroller._roller._tick;
-		return;
-	}
-};
-
-Sprite_ItemList.prototype.selectItemAbove = function(ctrl, shift) {
-	var itemIndex, itemRow, itemCol, lastRow, lastCol;
-	if (this.isEmpty()) return;
-	if (!this.isAnyItemSelected()) return this.selectItem(this.items().length - 1);
-	if (this.items().length == 1) return;
-	if ((ctrl || shift) && this._selectedItems.length >= this._maxSelection) return;
-
-	itemIndex = this._selectedItems.last();
-	itemRow = this.getItemRow(itemIndex);
-	itemCol = this.getItemCol(itemIndex);
-	lastRow = this.lastRow();
-	lastCol = this.lastCol();
-	if (lastRow === 1) return; //This list has only one line
-	if (itemRow === 1) { //Go to the last line
-		return this.selectItem(this.items().length - lastCol + Math.min(itemCol, lastCol) - 1, ctrl || shift);
-	}
-	return this.selectItem(itemIndex - this.columns, ctrl || shift);
-};
-
-Sprite_ItemList.prototype.selectNextItem = function(ctrl, shift) {
-	var itemIndex, lastIndex, nextIndex;
-	if (this.isEmpty()) return;
-	if (!this.isAnyItemSelected()) return this.selectItem(0);
-	if (this.items().length == 1) return;
-	if ((ctrl || shift) && this._selectedItems.length >= this._maxSelection) return;
-
-	itemIndex = this._selectedItems.last();
-	lastIndex = this.items().length - 1;
-	nextIndex = lastIndex > itemIndex ? itemIndex + 1 : 0;
-	return this.selectItem(nextIndex, ctrl || shift);
-};
-
-Sprite_ItemList.prototype.selectItemBeneath = function(ctrl, shift) {
-	var itemIndex, itemRow, itemCol, lastRow, lastCol, select;
-	if (this.isEmpty()) return;
-	if (!this.isAnyItemSelected()) return this.selectItem(0);
-	if ((ctrl || shift) && this._selectedItems.length >= this._maxSelection) return;
-
-	lastRow = this.lastRow();
-	if (lastRow === 1) return; //This list has only one line
-	lastCol = this.lastCol();
-	itemIndex = this._selectedItems.last();
-	itemRow = this.getItemRow(itemIndex);
-	itemCol = this.getItemCol(itemIndex);
-	if (itemRow === lastRow) return this.selectItem(itemCol - 1, ctrl || shift); //Go to the first line
-	return this.selectItem(Math.min(this.items().length - 1, itemIndex + this.columns), ctrl || shift);
-};
-
-Sprite_ItemList.prototype.selectPreviousItem = function(ctrl, shift) {
-	var itemIndex, previousIndex;
-	if (this.isEmpty()) return;
-	if (!this.isAnyItemSelected()) return this.selectItem(this.items().length - 1);
-	if (this.items().length == 1) return;
-	if ((ctrl || shift) && this._selectedItems.length >= this._maxSelection) return;
-
-	itemIndex = this._selectedItems.last();
-	previousIndex = itemIndex > 0 ? itemIndex - 1 : this.items().length - 1;
-	return this.selectItem(previousIndex, ctrl || shift);
-};
-
-//========================================
-// Sprite Item List - Resize
-
-Sprite_ItemList.prototype.resize = function(width, height) {
-	this.width = width;
-	this.height = height;
-};
-
-Sprite_ItemList.prototype.resizeBitmap = function(width, height) {
-	var roller = this._scroller._roller;
-	var old_width = this.width;
-	var old_height = this.height;
-	var fontSize = this.bitmap ? this.bitmap.fontSize : 28;
-	this.bitmap = new Bitmap(width, height);
-	this.bitmap.fontSize = fontSize;
-	this.width = old_width;
-	this.height = old_height;
-	if (this.isScroll()) {
-		let roller_w = this._scroller.width;
-		let roller_h = Math.floor(this.height * this.height / this.bitmap.height);
-		let limit_y = this.height - roller_h;
-		roller.bitmap = new Bitmap(roller_w, roller_h);
-		roller.setDragLimits(0, 0, 0, limit_y);
-		roller._tick = (this.bitmap.height - this.height) / (this.height - roller_h);
-	} else {
-		roller.bitmap.clear();
-	}
-	roller.y = 0;
-	this.setScrollY(0);
-};
-
-//========================================
-// Sprite Item List - Scroll
-
-Sprite_ItemList.prototype.isScroll = function() {
-	return this.height < this.bitmap.height;
-};
-
-Sprite_ItemList.prototype.setScrollY = function(y) {
-	this._frame.y = y;
-	this._scrollY = y;
-	this._refresh();
-};
-
-Sprite_ItemList.prototype.isMouseOverScroller = function() {
-	var tx = TouchInput.x;
-	var ty = TouchInput.y;
-	var sx = this.realX.call(this._scroller);
-	var sy = this.realY.call(this._scroller);
-	var width = this._scroller.width;
-	var height = this._scroller.height;
-	return sx <= tx && tx < (sx + width) && sy <= ty && ty < (sy + height);
-};
-
-//========================================
-// Sprite Item List - Draw
-
-Sprite_ItemList.prototype.redraw = function() {
-	this.setColorTone([0, 0, 0, 0]);
-	this.bitmap.clear();
-	this.drawItemList();
-};
-
-Sprite_ItemList.prototype.drawItemList = function() {
-	if (this.width < 2) return;
-	var fontSize = this.fontSize;
-	var lines = Math.ceil(this._items.length / this.columns);
-	var list_w = this.width;
-	var list_h = lines * this.itemHeight + (lines - 1) * this._gap_row;
-	this.resizeBitmap(list_w, list_h);
-
-	var x = 0, y = 0, row = 1, column = 1;
-	var item;
-	var maxCols = this.columns;
-	var scroller_w = this.isScroll() ? this._scroller.width : 0;
-	var color = '#999999';
-	var textMaxWidth = Math.floor(this._itemWidth - this.textPadding() * 2);
-	for (var i = 0; i < this._items.length; i++) {
-		item = this._items[i];
-		x = (this._itemWidth + this._gap_col) * (column - 1);
-		y = (this._itemHeight + this._gap_row) * (row - 1);
-		this.bitmap.fillRect(x, y, this._itemWidth, this.itemHeight, color);
-		x += this.textPadding();
-		this.drawItemName({name: item.text, iconIndex: item.iconIndex}, x, y, textMaxWidth, this.itemHeight);
-		color = color === '#999999' ? '#555555' : '#999999';
-		if (++column <= maxCols) continue;
-		column = 1;
-		color = ++row % 2 ? '#999999' : '#555555';
-		if (row > 1000) return console.warn("The given list is too big!");
-	}
-	this.drawScroller();
-};
-
-Sprite_ItemList.prototype.drawItemName = function(item, x, y, width, maxHeight) {
-	width = width || 312;
-	if (item) {
-		var iconBoxWidth = 0;
-		if (item.iconIndex > -2){
-			iconBoxWidth = Window_Base._iconWidth;
-			this.drawIcon(item.iconIndex, x, y + 2);
-		}
-		this.bitmap.drawText(item.name, x + iconBoxWidth, y, width - iconBoxWidth, maxHeight);
-	}
-};
-
-Sprite_ItemList.prototype.drawIcon = function(iconIndex, x, y) {
-	var bitmap = ImageManager.loadSystem('IconSet');
-	var pw = Window_Base._iconWidth;
-	var ph = Window_Base._iconHeight;
-	var sx = iconIndex % 16 * pw;
-	var sy = Math.floor(iconIndex / 16) * ph;
-	var fontSize = this.fontSize;
-	this.bitmap.blt(bitmap, sx, sy, pw, ph, x, y, fontSize, fontSize);
-};
-
-Sprite_ItemList.prototype.drawScroller = function() {
-	if (!this.isScroll()) return;
-	var width = this._scroller.width;
-	var height = this.height;
-	var radius = Math.floor(this._scroller.width / 2);
-	var color = '#ffffff';
-	this._scroller.bitmap.drawRoundedRect(0, 0, width, height, radius, color);
-	height = this._scroller._roller.height;
-	color = '#000000';
-	this._scroller._roller.drawMe(width, height, radius, color);
-};
-
-Sprite_ItemList.prototype.redrawItem = function(index) {
-	var item = this._items[index];
-	if (!item) return;
-	var id = index + 1;
-	var maxCols = this.columns
-	var column = (id % maxCols) || maxCols;
-	var line = Math.ceil(id / maxCols);
-	var x = (this.itemWidth + this._gap_col) * (column - 1);
-	var y = (this.itemHeight + this._gap_row) * (line - 1);
-	var textMaxWidth = this.itemWidth - this.textPadding() * 2;
-	var color = '#7777ff';
-	if (!this._selectedItems.contains(index)) {
-		let isColumnOdd = column % 2 !== 0;
-		let isLineOdd = line % 2 !== 0;
-		let isBothOdd = isLineOdd && isColumnOdd;
-		let isNeitherOdd = !isLineOdd && !isColumnOdd;
-		color = (isBothOdd || isNeitherOdd) ? '#999999' : '#555555';
-	}
-	this.bitmap.clearRect(x, y, this.itemWidth, this.itemHeight);
-	this.bitmap.fillRect(x, y, this.itemWidth, this.itemHeight, color);
-	x += this.textPadding();
-	this.drawItemName({name: item.text, iconIndex: item.iconIndex}, x, y, textMaxWidth, this.itemHeight);
-};
-
-//========================================
-// Sprite Item List - Others
-
-Sprite_ItemList.prototype.textPadding = function() {
-	return 4;
-};
-
-Sprite_ItemList.prototype.maxItems = function() {
-	return this.columns * this.rows;
-};
-
-Sprite_ItemList.prototype.isEmpty = function() {
-	return !this.items().length;
-};
-
-Sprite_ItemList.prototype.isAnyItemSelected = function() {
-	return !!this._selectedItems.length;
-};
-
-Sprite_ItemList.prototype.isMultipleItemsSelected = function() {
-	return this._selectedItems.length > 1;
-};
-
-Sprite_ItemList.prototype.getItemCol = function (index) {
-	if (!(index > 0)) return 1;
-	return ((index + 1) % this.columns) || this.columns;
-};
-
-Sprite_ItemList.prototype.getItemRow = function(index) {
-	if (!(index > 0)) return 1;
-	return Math.ceil((index + 1) / this.columns);
-};
-
-Sprite_ItemList.prototype.lastCol = function() {
-	return this.getItemCol(this.items().length - 1);
-};
-
-Sprite_ItemList.prototype.lastRow = function() {
-	return this.getItemRow(this.items().length - 1);
-};
-
-Sprite_ItemList.prototype.setGap = function(colGap, rowGap) {
-	this._gap_col = colGap == null ? 0 : colGap;
-	this._gap_row = rowGap == null ? 0 : rowGap;
-	this.redraw();
-};
-
-Sprite_ItemList.prototype.onSelect = function() {
-	SButton_Base.prototype.onSelect.call(this);
-	this._maxSelection = 3;
-	var isControl = Input.isPressed('control');
-	var selected = this.getOptionIndexOnXy(TouchInput._x, TouchInput._y);
-	if (isControl) {
-		if (this._selectedItems.contains(selected)) {
-			this._selectedItems.splice(this._selectedItems.indexOf(selected), 1);
-			this.redrawItem(selected);
-		} else if (this._selectedItems.length < this._maxSelection) {
-			this._selectedItems.push(selected);
-			this.redrawItem(selected);
-		}
-	} else {
-		if (this.isMultipleItemsSelected() || this._selectedItems[0] !== selected) {
-			var selectedItems = this._selectedItems.clone();
-			this._selectedItems = selectedItems.contains(selected) ? [selected] : [];
-			for (var i = 0; i < selectedItems.length; i++) {
-				this.redrawItem(selectedItems[i]);
-			}
-		}
-		if (this._selectedItems[0] === selected) {
-			return this.onDoubleSelection(selected);
-		}
-		this._selectedItems.push(selected);
-		this.redrawItem(selected);
-	}
-};
-
-Sprite_ItemList.prototype.onDoubleSelection = function(index) {};
-
-//-----------------------------------------------------------------
-// Options' list
-//-----------------------------------------------------------------
-function Sprite_OptionsList() {
-	this.initialize.apply(this, arguments);
-}
-
-Sprite_OptionsList.prototype = Object.create(SButton_Base.prototype);
-Sprite_OptionsList.prototype.constructor = Sprite_OptionsList;
-
-Sprite_OptionsList.prototype.initialize = function(Data) {
-	SButton_Base.prototype.initialize.call(this, Data);
-	this.initListValues();
-	this.redraw();
-};
-
-Sprite_OptionsList.prototype.initListValues = function() {
-	this._scrollY = 0;
-	this._lastIndex = -1;
-	this._cellHeight = this._data.height;
-	this._selected = -2;
-	this._index = -1;
-	this._lastRedraw = -1;
-	this._fixedTone = true;
-	this._lastHoverX = 0;
-	this._lastHoverY = 0;
-	this._arrowSize = this._data.scrollArrows ? 15 : 0;
-	this.y = this._cellHeight;
-	this.hide();
-};
-
-//========================================
-// Options List - Create
-
-Sprite_OptionsList.prototype.createMyBitmaps = function() {
-	SButton_Base.prototype.createMyBitmaps.call(this);
-	var width = this._data.width;
-	var height = this._data.height;
-	var allheight = height * this.listLimit();
-	this.bitmap = new Bitmap(width, allheight + 1);
-	this.createSelector(width, height);
-	this.createTextLayer(width, allheight);
-	this.createScroller();
-};
-
-Sprite_OptionsList.prototype.createSelector = function(width, height) {
-	this.selector = new Sprite(new Bitmap(width, height));
-	var selec_x = this._data.borderSize;
-	var selec_y = 1;
-	var selec_w = width - this._data.borderSize * 2;
-	var selec_h = height - 1;
-	var selec_c = this._data.selectorColor;
-	this.selector.bitmap.fillRect(selec_x, selec_y, selec_w, selec_h, selec_c);
-	this.selector.visible = false;
-	this.addChild(this.selector);
-};
-
-Sprite_OptionsList.prototype.createTextLayer = function(width, height) {
-	this.txtChild = new Sprite(new Bitmap(width, height));
-	this.txtChild.bitmap.fontSize = this._data.fontSize;
-	this.txtChild.bitmap.textColor = this._data.textColor;
-	this.addChild(this.txtChild);
-};
-
-Sprite_OptionsList.prototype.createScroller = function() {
-	if (!this.isScroll()) return;
-	var data = this._data;
-	var width = this._arrowSize || 15;
-	var height = this.height;
-	var arrow_size = this._arrowSize;
-
-	//Scroller -> background
-	this._scroller = new Sprite(new Bitmap(width, height));
-	this._scroller._hasArrows = data.scrollArrows;
-	this._scroller.recreate = function() {
-		//Reseting color tone (or else I won't be able to redraw)
-		this.setColorTone([0, 0, 0, 0]);
-
-		//Keep the same width and update the height
-		var width = this.parent._scroller.width;
-		var height = this.parent.height;
-		this.bitmap = new Bitmap(width, height);
-
-		//Redraw this bitmap and recreate the children
-		this.redraw(true);
-		if (this._hasArrows) {
-			this._topArrow.recreate();
-			this._botArrow.recreate();
-		}
-		this._roller.recreate();
-	};
-
-	this._scroller.redraw = function(isRecreate) {
-		//If this is not being recreated -> call a redraw for children
-		if (!isRecreate) {
-			this.setColorTone([0, 0, 0, 0]);
-			if (this._hasArrows) {
-				this._topArrow.redraw();
-				this._botArrow.redraw();
-			}
-			this._roller.redraw();
-		}
-
-		this.bitmap.clear();
-		this.drawMe();
-	};
-
-	this._scroller.drawMe = function() {
-		var w = this.width;
-		var h = this.height;
-		var bdSize = 1;
-		var bdColor = this.parent._data.borderColor;
-		var backColor = this.parent._data.backColor;
-		this.bitmap.drawBorderedRect(0, 0, w, h, bdSize, bdColor, backColor, null);
-	};
-
-	this._scroller.x = this.width;
-	this.addChild(this._scroller);
-	this._scroller.drawMe();
-
-	//Arrows
-	if (data.scrollArrows) {
-		//Top Arrow
-		var topButton = {
-			backColor: data.backColor,
-			textColor: data.textColor,
-			borderColor: data.borderColor,
-			borderSize: 1,
-			fontSize: Math.floor((data.fontSize / 2) - 1),
-			text: '▲',
-			textAlign: 'center',
-			width: width,
-			height: arrow_size,
-			x: 0,
-			y: 0,
-			onClick: this.scrollUp.bind(this)
-		};
-		this._scroller._topArrow = new SButton_Confirm(topButton);
-		this._scroller._topArrow.recreate = function() {return this.redraw();};
-		this._scroller._topArrow._overrideSelect = true;
-		this._scroller.addChild(this._scroller._topArrow);
-
-		//Bottom Arrow
-		var botButton = {
-			backColor: data.backColor,
-			textColor: data.textColor,
-			borderColor: data.borderColor,
-			borderSize: 1,
-			fontSize: Math.floor(data.fontSize/2 - 1),
-			text: '▼',
-			textAlign: 'center',
-			width: width,
-			height: arrow_size,
-			x: 0,
-			y: this.height - arrow_size,
-			onClick: this.scrollDown.bind(this)
-		};
-		this._scroller._botArrow = new SButton_Confirm(botButton);
-		this._scroller._botArrow.recreate = function() {return this.redraw();};
-		this._scroller._botArrow._overrideSelect = true;
-		this._scroller.addChild(this._scroller._botArrow);
-	} else {
-		this._scroller._topArrow = { height: 0 };
-		this._scroller._botArrow = { height: 0 };
-	}
-
-	//Roller
-	var padding = 1; // space between the roller and the walls
-	var back_height = height - arrow_size * 2;
-	var roller_w = width - 2 - padding * 2;
-	var roller_h = Math.floor(back_height * this.listLimit() / this.list().length);
-	var Data = { width: roller_w, height: roller_h };
-	var roller = new Sprite_Grabbable(Data);
-	roller._hoverTone = 20;
-	roller._grabTone = 35;
-	roller._overrideSelect = true;
-	roller.x = 1 + padding;
-	roller.y = arrow_size + padding;
-
-	var limitX = 1 + padding;
-	var limitY1 = arrow_size + padding;
-	var limitY2 = limitY1 + back_height - roller_h - padding * 2;
-	roller.setDragLimits(limitX, limitX, limitY1, limitY2);
-
-	roller._padding = padding;
-
-	roller._gap = Math.ceil(back_height / this.list().length);
-	roller._y0 = arrow_size + 1;
-
-	roller.recreate = function() {
-		this.setColorTone([0, 0, 0, 0]);
-		var parent = this.parent;	 // scroller
-		var grampa = parent.parent; // options' list
-		var bdSize = 1;
-		var back_h = parent.height - grampa._arrowSize * 2;
-		var width = parent.width - bdSize * 2 - this._padding * 2;
-		var height = Math.floor(back_h * grampa.listLimit() / grampa.list().length);
-		this.bitmap = new Bitmap(width, height);
-		this.redraw();
-	};
-
-	roller.redraw = function() {
-		this.setColorTone([0, 0, 0, 0]);
-		this.bitmap.clear();
-		var data = this.parent.parent._data;
-		var backColor = data.backColor;
-		var bdColor = data.borderColor;
-		var height = this.height;
-		var width = this.width;
-		var bdSize = 1; // edit
-		this.bitmap.drawBorderedRect(0, 0, width, height, bdSize, bdColor, backColor, null);
-	};
-
-	roller.update = function() {
-		Sprite_Grabbable.prototype.update.call(this);
-		if (this.isActive() && this.isGrabbed()) {
-			var scroll = Math.round((this.y - this._y0) / this._gap);
-			var grampa = this.parent.parent;
-			if (grampa._scrollY != scroll) {
-				grampa._scrollY = scroll;
-				grampa.refreshSelector();
-				grampa.redraw(true);
-			}
-		}
-	};
-
-	this._scroller._roller = roller;
-	this._scroller.addChild(roller);
-	roller.redraw();
-};
-
-//========================================
-// Options List - Scroll
-//
-// Boolean: loopAllowed -> if true, when the first item on the list is selected and "scrollUp" is called
-// the last item will be selected next. If the last item is selected and "scrollDown" is called, the
-// first item will be selected.
-
-Sprite_OptionsList.prototype.scrollUp = function(loopAllowed) {
-	if (this.list().length < 1) return;
-	this._index--;
-	if (this._index < 0) {
-		this._index = loopAllowed ? this.list().length - 1 : 0;
-	}
-	this.playScrollSE();
-	this.refreshScrolling();
-	this.refreshSelector();
-};
-
-Sprite_OptionsList.prototype.scrollDown = function(loopAllowed) {
-	if (this.list().length < 1) return;
-	this._index++;
-	if (this._index >= this.list().length) {
-		this._index = loopAllowed ? 0 : this._index - 1;
-	}
-	this.playScrollSE();
-	this.refreshScrolling();
-	this.refreshSelector();
-};
-
-Sprite_OptionsList.prototype.playScrollSE = function() {
-	SoundManager.playCursor();
-};
-
-Sprite_OptionsList.prototype.refreshScrolling = function() {
-	if (!this.isScroll()) return false;
-	var index = this.index();
-	if (this.isOptionVisible(index)) return false;
-	var isHigher = index > this._scrollY;
-	this._scrollY = isHigher ? index - this.listLimit() + 1 : index;
-	var scroller = this._scroller;
-	var button_h = scroller._topArrow.height;
-	var back_h = scroller.height - 2 * button_h;
-	var gap = scroller._roller._padding;
-	var prop = this._scrollY / this.list().length;
-	var bdSize = 1;
-	var y = Math.floor(button_h + back_h * prop);
-	var minY = button_h + gap;
-	var maxY = button_h + back_h - scroller._roller.height - gap;
-	scroller._roller.y = y.clamp(minY, maxY);
-	this.redraw();
-};
-
-Sprite_OptionsList.prototype.isScroll = function() {
-	return this.list().length > this.listLimit();
-};
-
-//========================================
-// Options List - Update
-
-Sprite_OptionsList.prototype.update = function() {
-	SButton_Base.prototype.update.call(this);
-	this.updateIndexSelection();
-	this.updateMyTriggers();
-};
-
-Sprite_OptionsList.prototype.updateMyTriggers = function() {
-	if (!this.isActive()) return;
-	var isTouchTriggered = TouchInput.isTriggered() && !this.isMouseOverScroller();
-	if (isTouchTriggered || Input.isTriggered('ok')) {
-		return this.onOkTriggered(isTouchTriggered);
-	}
-	if (Input.isTriggered('cancel') || TouchInput.isCancelled()) {
-		return this.onCancelTriggered();
-	} 
-	if (Input.isRepeated('down')) {
-		return this.scrollDown(true);
-	}
-	if (Input.isRepeated('up')) {
-		return this.scrollUp(true);
-	}
-};
-
-Sprite_ItemList.prototype.onOkTriggered = function(isTouchTriggered) {
-	if (isTouchTriggered && !this.isHovered()) {
-		this.deselectAllItems();
-	}
-};
-
-Sprite_ItemList.prototype.onCancelTriggered = function() {
-	this.deselectAllItems();
-};
-
-Sprite_OptionsList.prototype.updateIndexSelection = function() {
-	if (!this.isHovered()) return;
-	if (!this.isMouseMoved()) return;
-	var hover_index = this.getHoverIndex();
-	if (hover_index === -1) return;
-	this._lastHoverX = TouchInput._cX;
-	this._lastHoverY = TouchInput._cY;
-	this.setIndex(hover_index + this._scrollY);
-};
-
-Sprite_OptionsList.prototype.updateCloseTrigger = function() {
-	var isTouchTriggered = TouchInput.isTriggered() && !this.isMouseOverScroller();
-	if (isTouchTriggered || Input.isTriggered('ok')) {
-		this.onOkTriggered(isTouchTriggered);
-	} else if (Input.isTriggered('cancel') || TouchInput.isCancelled()) {
-		this.onCancelTriggered();
-	}
-};
-
-Sprite_OptionsList.prototype.scrollDown = function() {};
-
-Sprite_OptionsList.prototype.scrollUp = function() {};
-
-Sprite_OptionsList.prototype.isMouseMoved = function() {
-	return this._lastHoverX != TouchInput._cX || this._lastHoverY != TouchInput._cY;
-};
-
-Sprite_OptionsList.prototype.getHoverIndex = function() {
-	if (!this.isHovered()) return -1;
-	if (this.list().length === 0) return -1;
-	var index = Math.floor((TouchInput._cY - this.realY()) / this._cellHeight);
-	var maxIndex = this.listLimit() - 1;
-	return index.clamp(0, maxIndex);
-};
-
-Sprite_OptionsList.prototype.isXyInsideMe = function(x, y) {
-	var mx = this.realX();
-	var my = this.realY();
-	return x >= mx && x < mx + this.width && y >= my && y < my + this.height - 1;
-};
-
-Sprite_OptionsList.prototype.isMouseOverScroller = function() {
-	if (!this.isScroll()) return false;
-	var tx = TouchInput._x;
-	var ty = TouchInput._y;
-	var x1 = this.realX.call(this._scroller);
-	var x2 = x1 + this._scroller.width;
-	var y1 = this.realY.call(this._scroller);
-	var y2 = y1 + this._scroller.height;
-	return tx >= x1 && tx < x2 && ty >= y1 && ty < y2;
-};
-
-//========================================
-// Options List - Draw
-
-Sprite_OptionsList.prototype.drawMe = function() {
-	var w = this.width;
-	var h = this.height;
-	var ch = this._cellHeight;
-	var offset_x = this._data.textOffset[0];
-	var offset_y = this._data.textOffset[1];
-	var bdSize = this._data.borderSize;
-	var bdColor = this._data.borderColor;
-	var backColor = this._data.backColor;
-	var img = this._data.img;
-	var options = this._data.options;
-	var align = this._data.textAlign;
-	var txt_bmp = this.txtChild.bitmap;
-
-	//Drawing background
-	this.bitmap.drawBorderedRect(0, 0, w, h, bdSize, bdColor, backColor, img);
-
-	var max_width = w - 2 * bdSize;
-	var listLength = this.listLimit() + this._scrollY;
-	var selected = this.list().indexOf(this._data.value);
-	var gap = 3; //gap between a line and the borders
-	var tx, ty, lx, ly, lw;
-
-	//Drawing lines and options
-	//index -> general index | vIndex -> visual index
-	for (var index = this._scrollY, vIndex = 0; index < listLength; index++, vIndex++) {
-		//Drawing line
-		if (index > this._scrollY) {
-			lx = bdSize + gap; //line x
-			ly = ch * vIndex; //line y
-			lw = max_width - gap * 2; //line width
-			this.bitmap.fillRect(lx, ly, lw, 1, bdColor);
-		}
-
-		//Adding an outline color if this is the currently selected option
-		if (index === selected) {
-			txt_bmp.outlineColor = 'rgba(0, 0, 100, 1)';
-			this._lastRedraw = index;
-		}
-
-		//Drawing option
-		tx = bdSize + offset_x; //text x
-		ty = ch * vIndex + offset_y; //text y
-		txt_bmp.drawText(options[index], tx, ty, max_width, ch, align);
-		txt_bmp.outlineColor = 'rgba(0, 0, 0, 0.5)';
-	}
-};
-
-Sprite_OptionsList.prototype.redraw = function(onlyList) {
-	var data = this._data;
-
-	//Clearing bitmaps
-	this.bitmap.clear();
-	this.txtChild.setColorTone([0, 0, 0, 0]); //if tone != 0 the bitmap can't be cleared
-	this.txtChild.bitmap.clear();
-	this.selector.bitmap.clear();
-
-	//Check changes on the list limit
-	var oldHeight = this.height;
-	var height = data.height * this.listLimit() + 1;
-	var recreateBmaps = height != oldHeight;
-	if (recreateBmaps) {
-		this.bitmap = new Bitmap(this.width, height);
-		this.txtChild.bitmap = new Bitmap(this.width, height - 1);
-		this.txtChild.bitmap.fontSize = data.fontSize;
-		this.txtChild.bitmap.textColor = data.textColor;
-	}
-
-	if (!onlyList || recreateBmaps) {
-		this.redrawScroller(recreateBmaps);
-	}
-
-	this.drawMe();
-	var selector_x = data.borderSize; //selector x
-	var selector_w = data.width - data.borderSize * 2; //selector width
-	var selector_h = data.height - 1; //selector height
-	var selector_c = data.selectorColor; //selector color
-	this.selector.bitmap.fillRect(selector_x, 1, selector_w, selector_h, selector_c);
-	this._refresh();
-};
-
-Sprite_OptionsList.prototype.redrawScroller = function(recreate) {
-	if (!this._scroller) {
-		return this.createScroller();
-	}
-
-	if (this.isScroll()) {
-		if (recreate) {
-			this._scroller.recreate();
-		} else {
-			this._scroller.redraw();
-		}
-		this._scroller.visible = true;
-	} else {
-		this._scroller.visible = false;
-	};
-};
-
-Sprite_OptionsList.prototype.redrawOption = function(index) {
-	if (!this.isOptionVisible(index)) return;
-	var option = this.list()[index];
-	if (!option) return;
-	var data = this._data;
-	var visual_index = index - this._scrollY;
-	var x = data.textOffset[0] + data.borderSize;
-	var y = data.textOffset[1] + this._cellHeight * visual_index;
-	var maxWidth = this.width - 2 * data.borderSize;
-	var maxHeight = this._cellHeight;
-	var txt_bmp = this.txtChild.bitmap;
-	txt_bmp.clearRect(x, y, maxWidth, maxHeight);
-
-	//If this option is the one selected -> set special outline color
-	var selected = data.value.contains(option);
-	txt_bmp.outlineColor = selected ? 'rgba(0, 0, 100, 1)' : 'rgba(0, 0, 0, 0.5)';//edit
-
-	txt_bmp.drawText(option, x, y, maxWidth, maxHeight, data.textAlign);
-};
-
-//========================================
-// Options List - Index
-
-//Get the the index of the selected option
-Sprite_OptionsList.prototype.index = function() {
-	return this._index;
-};
-
-//Get the visual index (the scroll is ignored)
-Sprite_OptionsList.prototype.visualIndex = function() {
-	return this._index - this._scrollY;
-};
-
-//Get the visual index for a given index
-Sprite_OptionsList.prototype.getVisIndex = function(index) {
-	return index - this._scrollY;
-};
-
-Sprite_OptionsList.prototype.setIndex = function(index) {
-	var isIndexAvailable = (index > -1 && index < this.list().length);
-	this._index = isIndexAvailable ? index : -1;
-	if (isIndexAvailable) {
-		this.refreshScrolling();
-	}
-	this.refreshSelector();
-};
-
-//========================================
-// Options List - Others
-
-Sprite_OptionsList.prototype.open = function() {
-	if (this.list().length < 1) return;
-	var index = this.list().indexOf(this.currentValue());
-	this.setIndex(index);
-	if (index > -1 && this._lastRedraw != index) {
-		this.redrawOption(index);
-	}
-	this.redrawOption(this._lastRedraw);
-	this._lastRedraw = index;
-	this.smartPosition();
-	this.show();
-};
-
-Sprite_OptionsList.prototype.close = function() {
-	this._selected = -2;
-	this.selector.visible = false;
-	this.hide();
-};
-
-//Considering the button's position when drawing the list
-//This will avoid hiding the list out the screen
-Sprite_OptionsList.prototype.smartPosition = function() {
-	//Y axis
-	this.y = this._data.height;
-	var higherY = this.realY() + this.height;
-	if (higherY > Graphics.height) {
-		this.y = this.y - (higherY - Graphics.height);
-	}
-
-	//X axis
-	this.x = 0;
-	var realX = this.realX();
-	var scroller_w = this._scroller ? this._scroller.width : 0;
-	var higherX = realX + this.width + scroller_w;
-	if (realX < 0) {
-		this.x = - realX;
-	} else if (higherX > Graphics.width) {
-		this.x = Graphics.width - higherX;
-	}
-};
-
-Sprite_OptionsList.prototype.refreshSelector = function() {
-	this.selector.visible = this.isOptionVisible(this.index());
-	if (this.selector.visible) {
-		this.selector.y = this.visualIndex() * this._cellHeight;
-	}
-};
-
-Sprite_OptionsList.prototype.list = function() {
-	return this._data.options;
-};
-
-//List's visual limit
-Sprite_OptionsList.prototype.listLimit = function() {
-	return Math.min(this._data.listLimit, this.list().length);
-};
-
-Sprite_OptionsList.prototype.isOptionVisible = function(index) {
-	return index >= this._scrollY && index < this.listLimit() + this._scrollY;
-};
-
-Sprite_OptionsList.prototype.currentValue = function() {
-	return this._data.value;
-};
-
-Sprite_OptionsList.prototype.onOkTriggered = function(isTouchTriggered) {
-	var index = this.index();
-	if (isTouchTriggered) {
-		let index2 = this.getHoverIndex();
-		index = index2 > -1 ? index2 + this._scrollY : -1;
-	}
-	this._selected = index;
-	this.parent.closeOptions();
-};
-
-Sprite_OptionsList.prototype.onCancelTriggered = function() {
-	this._selected = -1;
-	this.parent.closeOptions();
-};
-
-//----------------------------------------------------------------------------------------------
-// Select Button
-// * When selected it'll open a list for the player to choose from
+// Select Button - Create
+// * When selected it'll open a list of options for the user to choose from
+// * Clicking anywhere on the screen will close the list
 //----------------------------------------------------------------------------------------------
 function SButton_Select() {
 	this.initialize.apply(this, arguments);
@@ -10404,128 +9215,132 @@ SButton_Select.prototype = Object.create(SButton_Confirm.prototype);
 SButton_Select.prototype.constructor = SButton_Select;
 
 //========================================
-// Select Button - Create
+// Select Button - Initialize
 
 SButton_Select.prototype.initValues = function(data) {
 	SButton_Confirm.prototype.initValues.call(this, data);
 	this._selected = false;
-	this._data.value = [];
 };
 
-SButton_Select.prototype.createMyTools = function() {
-	this.createOptions();
+SButton_Select.prototype.initTools = function() {
+	this.initOptions();
 };
 
-SButton_Select.prototype.createOptions = function() {
-	//this._options = new Sprite_OptionsList(this._data); //edit
-	var data = {
+SButton_Select.prototype.initOptions = function() {
+	var data = this._data;
+	var options;
+	var optionsData = {
 		x: 0,
-		y: this.height,
+		y: this.height - data.borderSize,
 		width: this.width,
-		height: this.height * this._data.listLimit,
-		fontSize: this._data.fontSize,
-		fontFace: this._data.fontFace,
-		textColor: this._data.textColor,
-		backColor: this._data.backColor,
-		borderColor: this._data.borderColor,
-		borderSize: this._data.borderSize
+		height: this.height * data.options.length,
+		listLimit: data.listLimit,
+		fontSize: data.fontSize,
+		fontFace: data.fontFace,
+		textColor: data.textColor,
+		backColor: data.borderColor,
+		borderColor: data.borderColor,
+		borderSize: data.borderSize,
+		selectorColor: data.selectorColor,
+		hoverColor: data.hoverColor,
+		itemColors: data.itemColors,
+		scrollColors: data.scrollColors,
+		hideSelect: true
 	};
-	this._options = new Sprite_ItemList(data, 1);
-	this._options._overrideSelect = true;
-	this._options._scroller._roller._overrideSelect = true;
-	this._options.setItemList(this._data.options);
-	this._options.open = function() {
+	var options = new Sprite_ItemList(optionsData, 1);
+	options._overrideSelect = true;
+	options._scroller._roller._overrideSelect = true;
+	options.setItemList(data.options);
+	options.open = function() {
 		this.visible = true;
+		var button_value = this.parent.currentValue();
+		if (button_value) {
+			this.selectItem(this.getIndexByString(button_value));
+		}
+		SceneManager._scene.selectButton(this, false);
 	};
-	this._options.close = function() {
+	options.close = function(keep) {
+		if (!this.visible) return;
 		this.visible = false;
-	//	this.parent.closeOptions();
+		var data = this.parent._data;
+		var items = this.getSelectedItems();
+		if (data.value.equals(items) || keep) {
+			this.parent.onOptionKeep();
+		} else {
+			data.value = items;
+			this.parent.onOptionChange(items, this._selectedIndexes.clone());
+		}
+		SceneManager._scene._selecting = false;
+		data.open = false;
+		this.parent.setHover(false);
 	};
-	this._options.onSelect = function() {
-		var isControl = Input.isPressed('control');
-		Sprite_ItemList.prototype.onSelect.call(this);
-		if (!isControl) {
-			this.parent.closeOptions();
+	options.onSelect = function(touch) {
+		touch = touch == undefined ? true : touch;
+		Sprite_ItemList.prototype.onSelect.call(this, touch);
+		if (touch && !Input.isPressed('control') && !this.isMouseOverScroller()) {
+			this.close();
 		}
 	};
-	this._options.onDeselect = function() {
-		console.log('t', this._parentFocused)
+	options.onReselect = function() {
+		Sprite_ItemList.prototype.onReselect.call(this);
+		if (!Input.isPressed('control') && !this.isMouseOverScroller()) {
+			this.close();
+		}
+	};
+	options.onDeselect = function() {
 		Sprite_ItemList.prototype.onDeselect.call(this);
-		this.parent.closeOptions();
+		if (!this.isMouseOverScroller()) {
+			this.close(true);
+		}
 	};
-	this._options.onCancelTriggered = function(isTouchTriggered) {
-		Sprite_ItemList.prototype.onCancelTriggered.call(this, isTouchTriggered);
-		this.parent.closeOptions();
+	options.onCancelled = function() {
+		Sprite_ItemList.prototype.onCancelled.call(this);
+		this.close(true);
 	};
-	this._options.visible = false;
+	options.visible = false;
+	this._options = options;
 	this.addChild(this._options);
-};
-
-SButton_Select.prototype.recreateOptions = function() {
-	this._options.redraw();
 };
 
 SButton_Select.prototype.getDefaultData = function(data) {
 	SButton_Confirm.prototype.getDefaultData.call(this, data);
 	for (var k in SBUTTON_DEFAULT_SELECT) {
-		if (data[k] == null) {
-			this._data[k] = SBUTTON_DEFAULT_SELECT[k];
-		} else {
-			this._data[k] = data[k];
+		if (this.id == 'SOP') {
+			console.log(k, data[k])
 		}
+		this._data[k] = data[k] != null ? data[k] : SBUTTON_DEFAULT_SELECT[k];
 	}
 
-	if (!Array.isArray(this._data['options'])) {
-		this._data['options'] = [];
+	if (!Array.isArray(this._data.options)) {
+		this._data.options = [];
 	}
-};
 
-//========================================
-// Select Button - Update
-
-SButton_Select.prototype.update = function() {
-	SButton_Confirm.prototype.update.call(this);
-	this.updateCloseOptions();
-};
-
-SButton_Select.prototype.updateCloseOptions = function() {
-	if (!this._closingOptions) return;
-	if (TouchInput.isPressed()) return;
-	SceneManager._scene._selecting = false;
-	this._closingOptions = false;
-};
-
-SButton_Select.prototype.currentValue = function() {
-	return this._data.value.last();
-};
-
-SButton_Select.prototype.closeOptions = function() {
-	var data = this._data;
-	var options = this._options;
-	if (options.visible) {
-		console.log('visible')
-		var selected = options._selectedItems.last();
-		var items = options.getSelectedItems();
-		if (data.value.equals(items)) {
-			this.onOptionKeep();
-		} else {
-			data.value = items;
-			this.onOptionChange(items, options._selectedItems.clone());
-		}
-		options.close();
+	if (!Array.isArray(this._data.value)) {
+		this._data.value = [];
 	}
-	data.open = false;
-	if (selButton.isSelected()) {
-		SceneManager._scene.selectButton(null);
+
+	if (!Array.isArray(this._data.itemColors)) {
+		this._data.itemColors = [];
 	}
-	this.redraw();
-	this._closingOptions = true;
+	if (this._data.itemColors.length < 2) {
+		this._data.itemColors[0] = this._data.itemColors[0] || '#999999';
+		this._data.itemColors[1] = this._data.itemColors[1] || '#555555';
+	}
+
+	if (!Array.isArray(this._data.scrollColors)) {
+		this._data.scrollColors = [];
+	}
+	if (this._data.scrollColors.length < 2) {
+		this._data.scrollColors[0] = this._data.scrollColors[0] || '#353535';
+		this._data.scrollColors[1] = this._data.scrollColors[1] || '#575757';
+	}
 };
 
 //========================================
 // Select Button - On Action
 
 SButton_Select.prototype.onClickSuccess = function() {
+	if (this._closingOptions) return;
 	SButton_Confirm.prototype.onClickSuccess.call(this);
 	this._data.open = !this._data.open;
 	if (this._data.open) {
@@ -10537,6 +9352,7 @@ SButton_Select.prototype.onClickSuccess = function() {
 
 SButton_Select.prototype.onOptionChange = function(values, indexes) {
 	SoundManager.playOk();
+	this.redrawMyText();
 	if (this._data.onOptChange) {
 		this._data.onOptChange(values, indexes);
 	}
@@ -10544,65 +9360,56 @@ SButton_Select.prototype.onOptionChange = function(values, indexes) {
 
 SButton_Select.prototype.onOptionKeep = function() {
 	SoundManager.playCancel();
+	this.redrawMyText();
 	if (this._data.onOptKeep) {
 		this._data.onOptKeep();
 	}
 };
 
-SButton_Select.prototype.getOptionIndexOnClick = function() {
-	return this.getOptionIndexOnXy(TouchInput._x, TouchInput._y);
-};
-
 //========================================
 // Select Button - Draw
 
-SButton_Select.prototype.drawBackground = function() {
-	var d = this._data;
-	var bmp = this.bitmap;
-	var txt_bmp = this.txtChild.bitmap;
-	txt_bmp.fontSize = d.fontSize;
-	txt_bmp.textColor = d.textColor;
-
-	//Drawing background
-	//var bdColor = d.borderColor;
-	//bdColor = this.isSelected() ? d.selectorColor : bdColor;
-	//bmp.drawBorderedRect(0, 0, d.width, d.height, d.borderSize, bdColor, d.backColor, d.img);
-	SButton_Confirm.prototype.drawBackground.call(this);
-
-	//Drawing arrow
-	var arrow_w = Math.floor(d.width / 8);
-	var arrow_h = Math.floor(d.height / 3);
-	var arrow_x = d.width - arrow_w - 5;
-	var arrow_y = arrow_h;
-	var arrow_d = d.open ? 'up' : 'down';
-	bmp.drawTriangleS(arrow_x, arrow_y, arrow_w, arrow_h, arrow_d, '#ffffff');
-};
-
 SButton_Select.prototype.drawMyText = function() {
+	var txt_bmp = this.txtChild.bitmap;
 	var data = this._data;
 	var text = this.currentValue() == null ? data.text : this.currentValue();
-	var bdSize = data.borderSize;
-	var x = bdSize + data.textOffset[0];
+	var bds = data.borderSize;
+	var x = bds + data.textOffset[0];
 	var y = data.textOffset[1];
+	txt_bmp.fontSize = data.fontSize;
+	txt_bmp.textColor = data.textColor;
 
+	//Drawing arrow
+	var arrow_w = Math.floor(data.width / 8);
+	var arrow_h = Math.floor(data.height / 3);
+	var arrow_x = data.width - arrow_w - 5;
+	var arrow_y = arrow_h;
+	var arrow_d = this._options && this._options.visible ? 'up' : 'down';
+	txt_bmp.drawTriangleS(arrow_x, arrow_y, arrow_w, arrow_h, arrow_d, '#ffffff');
+
+	//Drawing text
 	var arrow_w = Math.floor(data.height / 2);
-	var arrow_x = data.width - Math.floor(arrow_w / 2) - 10;
-	var maxWidth = data.width - bdSize - x - (data.width - arrow_x - 4);
+	var arrow_x = data.width - Math.floor(arrow_w / 2) - 8 - bds;
+	var maxWidth = data.width - bds - x - (data.width - arrow_x - 4);
 	var maxHeight = data.height - data.textOffset[1];
 	var align = data.textAlign;
-	this.txtChild.bitmap.drawText(text, x, y, maxWidth, maxHeight, align);
+	txt_bmp.drawText(text, x, y, maxWidth, maxHeight, align);
 	if (!this.currentValue()) {
-		var tone = -75;
+		let tone = -75;
 		this.txtChild.setColorTone([tone, tone, tone, tone]);
 	}
 };
 
 SButton_Select.prototype.redraw = function(all) {
 	if (all) {
-		this._options.redraw();
+		this.redrawOptions();
 	}
 	SButton_Confirm.prototype.redraw.call(this);
 	this._refresh();
+};
+
+SButton_Select.prototype.redrawOptions = function() {
+	this._options.redraw();
 };
 
 SButton_Select.prototype.redrawMyText = function() {
@@ -10613,34 +9420,22 @@ SButton_Select.prototype.redrawMyText = function() {
 //========================================
 // Select Button - Others
 
+SButton_Select.prototype.currentValue = function() {
+	return this._data.value.last();
+};
+
 SButton_Select.prototype.isOpen = function() {
 	return this._data.open;
 };
 
-SButton_Select.prototype.getOptionIndexOnXy = function(x, y) {
-	if (this.isOpen()) {
-		var list = this._options;
-		var x1 = list.realX();
-		var x2 = x1 + list.width;
-		var y1 = list.realY();
-		var y2 = y1 + list.height - 1;
-		var isInsideMe = x >= x1 && x < x2 && y >= y1 && y < y2;
-		if (isInsideMe) {
-			var localY = y - y1;
-			var scroll = this._options._scrollY;
-			return Math.floor(localY / this._data.height) + scroll;
-		}
-	}
-	return -1;
-};
-
 SButton_Select.prototype.setList = function(list) {
+	this._data.options = [];
 	if (Object.prototype.toString.call(list) !== '[object Array]') return;
 	if (JSON.stringify(this._data.options) === JSON.stringify(list)) return;
 	this._data.options = list;
-	this.recreateOptions();
+	this.redrawOptions();
 	if (this._data.open) {
-		this.closeOptions();
+		this._options.close();
 	}
 };
 
@@ -10667,13 +9462,16 @@ Object.defineProperty(SButton_Text.prototype, 'value', {
 	configurable: true
 });
 
-SButton_Text.prototype.initialize = function(Data) {
-	SButton_Confirm.prototype.initialize.call(this, Data);
+SButton_Text.prototype.initialize = function(data) {
+	SButton_Confirm.prototype.initialize.call(this, data);
 	this.formatValue();
 };
 
-SButton_Text.prototype.initValues = function(Data) {
-	SButton_Confirm.prototype.initValues.call(this, Data);
+SButton_Text.prototype.initValues = function(data) {
+	SButton_Confirm.prototype.initValues.call(this, data);
+	if (!this._data.cursorStyle) {
+		this._data.cursorStyle = 'text';
+	}
 	this._scrollX = 0;
 	this._scrollY = 0;
 	this._line = 1;
@@ -10684,11 +9482,7 @@ SButton_Text.prototype.initValues = function(Data) {
 SButton_Text.prototype.getDefaultData = function(data) {
 	SButton_Confirm.prototype.getDefaultData.call(this, data);
 	for (k in SBUTTON_DEFAULT_TEXT) {
-		if (data[k] == null) {
-			this._data[k] = SBUTTON_DEFAULT_TEXT[k];
-		} else {
-			this._data[k] = data[k];
-		}
+		this._data[k] = data[k] != null ? data[k] : SBUTTON_DEFAULT_TEXT[k];
 	}
 
 	if (!Array.isArray(this._data.options)) {
@@ -10746,8 +9540,8 @@ SButton_Text.prototype.getYIndexOnClick = function() {
 	return Math.max(0, index);
 };
 
-SButton_Text.prototype.createMyTools = function() {
-	SButton_Select.prototype.createMyTools.call(this);
+SButton_Text.prototype.initTools = function() {
+	SButton_Select.prototype.initTools.call(this);
 	this._options.onOkTriggered = function(isTouchTriggered) {
 		var data = this.parent._data;
 		if (data.maxLines === 1 || isTouchTriggered) {
@@ -11035,8 +9829,8 @@ SButton_Text.prototype.maxVisLines = function() {
 	return this._maxVisLines = Math.floor(maxHeight / lineHeight);
 };
 
-SButton_Text.prototype.onSelect = function() {
-	SButton_Select.prototype.onSelect.call(this);
+SButton_Text.prototype.onSelect = function(touch) {
+	SButton_Select.prototype.onSelect.call(this, touch);
 	SButton_Text.getCustomKeyCodes();
 	if (TouchInput.isTriggered()) {
 		var index_x = this.getXIndexOnClick();
@@ -11163,7 +9957,7 @@ SButton_Text.prototype.hideCursor = function() {
 //Others
 SButton_Text.prototype.rightMembers = function() {
 	return Math.max(0, this.line().length - this.maxVisLetters() - this.scrollX());
-	//return Math.max(0, this._data.value.length - this.maxVisLetters() - this.scrollX());//aqui2
+	//return Math.max(0, this._data.value.length - this.maxVisLetters() - this.scrollX());//aqui1
 };
 
 SButton_Text.prototype.isOnlyNumbers = function() {
@@ -11178,14 +9972,14 @@ SButton_Text.prototype.line = function() {
 	return this._lines[this.realCursorY()] || '';
 };
 
-SButton_Text.prototype.onMouseHover = function() {
+/*SButton_Text.prototype.onMouseHover = function() {
 	SButton_Confirm.prototype.onMouseHover.call(this);
 	document.body.style.cursor = 'text';
 };
 SButton_Text.prototype.onMouseLeave = function() {
 	SButton_Confirm.prototype.onMouseLeave.call(this);
 	document.body.style.cursor = '';
-};
+};*/
 
 SButton_Text.prototype.closeOptions = function() {
 	if (!this._hovered) {
@@ -11643,8 +10437,768 @@ SButton_Text.updateTextInput = function(button) {
 			break;
 		}
 	}
-};//SMO buttons end //edit
+};
 
+//----------------------------------------------------------------------------------------------
+// Item List - Create
+// * Creates a list of items from which it's possible to choose from
+//----------------------------------------------------------------------------------------------
+function Sprite_ItemList() {
+	this.initialize.apply(this, arguments);
+}
+
+Sprite_ItemList.prototype = Object.create(SButton_Base.prototype);
+Sprite_ItemList.prototype.constructor = Sprite_ItemList;
+
+Object.defineProperty(Sprite_ItemList.prototype, 'fontSize', {
+	get: function() {
+		return this.bitmap.fontSize;
+	},
+	set: function(value) {
+		if (this.bitmap.fontSize != value) {
+			this.bitmap.fontSize = value;
+			this.redraw();
+		}
+	},
+	configurable: true
+});
+
+Object.defineProperty(Sprite_ItemList.prototype, 'itemWidth', {
+	get: function() {
+		return this._itemWidth;
+	},
+	set: function(value) {
+		if (!isNaN(value = Number(value)) && this._itemWidth !== value) {
+			this._itemWidth = value;
+			this.redraw();
+		}
+	},
+	configurable: true
+});
+
+Object.defineProperty(Sprite_ItemList.prototype, 'itemHeight', {
+	get: function() {
+		return this._itemHeight;
+	},
+	set: function(value) {
+		if (!isNaN(value = Number(value)) && this._itemHeight !== value && value >= 0) {
+			this._itemHeight = value;
+			this.redraw();
+		}
+	},
+	configurable: true
+});
+
+Object.defineProperty(Sprite_ItemList.prototype, 'columns', {
+	get: function() {
+		return this._cols;
+	},
+	set: function(value) {
+		if (!isNaN(value = Number(value)) && this._cols !== value && value >= 0) {
+			this._cols = value;
+			this.redraw();
+		}
+	},
+	configurable: true
+});
+
+Object.defineProperty(Sprite_ItemList.prototype, 'rows', {
+	get: function() {
+		return this._rows;
+	},
+	set: function(value) {
+		if (!isNaN(value = Number(value)) && this._rows !== value && value >= 0) {
+			this._rows = value;
+			this.redraw();
+		}
+	},
+	configurable: true
+});
+
+Object.defineProperty(Sprite_ItemList.prototype, 'gap_x', {
+	get: function() {
+		return this._gap_col;
+	},
+	set: function(value) {
+		if (!isNaN(value = Number(value)) && this._gap_col !== value && value >= 0) {
+			this._gap_col = value;
+			this.redraw();
+		}
+	},
+	configurable: true
+});
+
+Object.defineProperty(Sprite_ItemList.prototype, 'gap_y', {
+	get: function() {
+		return this._gap_row;
+	},
+	set: function(value) {
+		if (!isNaN(value = Number(value)) && this._gap_row !== value && value >= 0) {
+			this._gap_row = value;
+			this.redraw();
+		}
+	},
+	configurable: true
+});
+
+Object.defineProperty(Sprite_ItemList.prototype, 'scrollerWidth', {
+	get: function() {
+		return this._scroller_w;
+	},
+	set: function(value) {
+		if (!isNaN(value = Number(value)) && this._scroller_w !== value && value >= 0) {
+			this._scroller_w = value;
+			this.redraw();
+		}
+	},
+	configurable: true
+});
+
+//========================================
+// Item List - Initialize
+
+Sprite_ItemList.prototype.initialize = function(data, cols, rows) {
+	data = data || {};
+	this._items = [];
+	this._cols = cols > 0 ? Number(cols) : 999;
+	this._rows = rows > 0 ? Number(rows) : 999;
+	SButton_Base.prototype.initialize.call(this, data);
+	var ndata = this._data;
+	ndata.listLimit = data.listLimit || 5;
+	ndata.hoverColor = data.hoverColor || '#9696ff';
+	ndata.itemHeight = data.itemHeight || (ndata.height - ndata.borderSize * 2) / ndata.listLimit;
+	ndata.itemColors = data.itemColors || [];
+	ndata.itemColors[0] = ndata.itemColors[0] || '#999999';
+	ndata.itemColors[1] = ndata.itemColors[1] || '#555555';
+	ndata.scrollColors = data.scrollColors || [];
+	ndata.scrollColors[0] = ndata.scrollColors[0] || '#575757';
+	ndata.scrollColors[1] = ndata.scrollColors[1] || '#353535';
+	ndata.maxSelection = data.maxSelection > 0 ? data.maxSelection : 1;
+	var borders_x = this.isScroll() ? ndata.borderSize : ndata.borderSize * 2;
+	var scroller_w = this.isScroll() ? this._scroller_w : 0;
+	this._itemWidth = Math.ceil((ndata.width - borders_x - scroller_w) / this.columns - this._gap_col * (this.columns - 1));
+	this._itemHeight = Math.ceil(ndata.itemHeight);
+};
+
+Sprite_ItemList.prototype.initValues = function(data) {
+	SButton_Base.prototype.initValues.call(this, data);
+	this._scroller_w = 8;
+	this._selectedIndexes = [];
+	this._scrollX = 0;
+	this._scrollY = 0;
+	this._gap_row = 1;
+	this._gap_col = 1;
+	this._fixedTone = true;
+};
+
+Sprite_ItemList.prototype.initBitmaps = function() {
+	this.bitmap = new Bitmap(this._data.width, this._data.height);
+	this.bitmap.fontSize = this._data.fontSize;
+	this.borders = new Sprite(new Bitmap(this._data.width, this._data.height));
+	this.addChild(this.borders);
+	this.initScroller();
+};
+
+Sprite_ItemList.prototype.initScroller = function() {
+	var x = this.width - this._scroller_w;
+	var scroll_h = this.height - this.borderSize * 2;
+	this._scroller = new Sprite(new Bitmap(this._scroller_w, this.height));
+	this._scroller.x = x;
+
+	roller = new Sprite_Grabbable({desing:'round-rect', borderSize:0});
+	roller.initBitmaps = function() {
+		this.bitmap = new Bitmap(1, 1);
+	};
+	roller.drawMe = function(width, height, radius, color) {
+		this.bitmap.drawRoundedRect(0, 0, width, height, radius, color);
+	};
+	roller.onMoved = function() {
+		Sprite_Grabbable.prototype.onMoved.call(this);
+		var gramps = this.parent.parent;
+		gramps.setScrollY(this.y * this._tick);
+	};
+	roller.onRelease = function() {
+		Sprite_Grabbable.prototype.onRelease.call(this);
+		SceneManager._scene.selectButton(this.parent.parent, false);
+	};
+	roller._fixedTone = true;
+	roller._tick = 0;
+	this._scroller._roller = roller;
+	this._scroller.addChild(this._scroller._roller);
+
+	this.addChild(this._scroller);
+};
+
+//========================================
+// Item List - Update
+
+Sprite_ItemList.prototype.update = function() {
+	SButton_Base.prototype.update.call(this);
+	this.updateIndexSelection();
+	this.updateMyTriggers();
+};
+
+Sprite_ItemList.prototype.updateMyTriggers = function() {
+	var ctrl, shift;
+	if (!this.isSelected()) return;
+	if (Input.isTriggered('ok')) return this.onOkTriggered();
+	if (this.isCancelled()) return this.onCancelled();
+
+	ctrl = Input.isPressed('control');
+	shift = Input.isPressed('shift');
+	if (Input.isRepeated('up')) return this.selectItemAbove(ctrl, shift);
+	if (Input.isRepeated('right')) return this.selectNextItem(ctrl, shift);
+	if (Input.isRepeated('down')) return this.selectItemBeneath(ctrl, shift);
+	if (Input.isRepeated('left')) return this.selectPreviousItem(ctrl, shift);
+};
+
+Sprite_ItemList.prototype.updateIndexSelection = function() {
+	if (!this.isHovered()) return;
+	if (!this.isMouseMoved()) return;
+	var hover_index = this.getHoverIndex();
+	this._lastHoverX = TouchInput._cX;
+	this._lastHoverY = TouchInput._cY;
+	this.hoverSelect(hover_index);
+};
+
+//========================================
+// Item List - Draw
+
+Sprite_ItemList.prototype.drawItemList = function() {
+	if (this.width < 2) return;
+	var bds = this.borderSize;
+	var bds_x = this.isScroll() ? bds : bds * 2;
+	var fontSize = this.fontSize;
+	var lines = Math.ceil(this._items.length / this.columns);
+	var list_w = this.width - bds_x;
+	var list_h = lines * this.itemHeight + (lines - 1) * this._gap_row + bds - 1;//edit -1 teste
+	this.resizeBitmap(list_w, list_h);
+	this.bitmap.fillAll(this.backColor);
+
+	var item;
+	var x = 0, y = 0, row = 1, column = 1;
+	var maxCols = this.columns;
+	var scroller_w = this.isScroll() ? this._scroller.width : 0;
+	var itemColors = this._data.itemColors;
+	var color = itemColors[0];
+	var textMaxWidth = Math.floor(this._itemWidth - this.textPadding() * 2);
+	for (var i = 0; i < this._items.length; i++) {
+		item = this._items[i];
+		x = (this._itemWidth + this._gap_col) * (column - 1) + bds;
+		y = (this._itemHeight + this._gap_row) * (row - 1) + bds;
+		this.bitmap.clearRect(x, y, this._itemWidth, this.itemHeight);
+		this.bitmap.fillRect(x, y, this._itemWidth, this.itemHeight, color);
+		x += this.textPadding();
+		this.drawItemName({name: item.text, iconIndex: item.iconIndex}, x, y, textMaxWidth, this.itemHeight);
+		color = color === itemColors[0] ? itemColors[1] : itemColors[0];
+		if (++column <= maxCols) continue;
+		column = 1;
+		color = ++row % 2 ? itemColors[0] : itemColors[1];
+		if (row > 1000) {
+			console.warn("The given list is too big! Button ID: '" + this.id + "'");
+			break;
+		}
+	}
+	this.drawScroller();
+};
+
+Sprite_ItemList.prototype.drawItemName = function(item, x, y, width, maxHeight) {
+	width = width || 312;
+	if (item) {
+		var iconBoxWidth = 0;
+		if (item.iconIndex > -2) {
+			iconBoxWidth = Math.min(this.itemHeight - 4, Math.max(this.fontSize, Window_Base._iconWidth));
+			let iconY = Math.floor(y + (maxHeight - iconBoxWidth)/2);
+			this.drawIcon(item.iconIndex, x, iconY, iconBoxWidth);
+		}
+		this.bitmap.drawText(item.name, x + iconBoxWidth + 2, y, width - iconBoxWidth, maxHeight);
+	}
+};
+
+Sprite_ItemList.prototype.drawIcon = function(iconIndex, x, y, width) {
+	var bitmap = ImageManager.loadSystem('IconSet');
+	var pw = Window_Base._iconWidth;
+	var ph = Window_Base._iconHeight;
+	var sx = iconIndex % 16 * pw;
+	var sy = Math.floor(iconIndex / 16) * ph;
+	this.bitmap.blt(bitmap, sx, sy, pw, ph, x, y, width, width);
+};
+
+Sprite_ItemList.prototype.drawScroller = function() {
+	if (!this.isScroll()) return;
+	var width = this._scroller.width;
+	var height = this.height;
+	var radius = Math.floor(this._scroller.width / 2);
+	var color = this._data.scrollColors[0];
+	this._scroller.bitmap.drawRoundedRect(0, 0, width, height, radius, color);
+	height = this._scroller._roller.height;
+	color = this._data.scrollColors[1];
+	this._scroller._roller.drawMe(width, height, radius, color);
+};
+
+Sprite_ItemList.prototype.redraw = function() {
+	this.setColorTone([0, 0, 0, 0]);
+	this.bitmap.clear();
+	this.drawItemList();
+};
+
+Sprite_ItemList.prototype.redrawItem = function(index) {
+	var item = this._items[index];
+	if (!item) return;
+	var color;
+	var id = index + 1;
+	var maxCols = this.columns
+	var column = (id % maxCols) || maxCols;
+	var line = Math.ceil(id / maxCols);
+	var x = (this.itemWidth + this._gap_col) * (column - 1) + this.borderSize;
+	var y = (this.itemHeight + this._gap_row) * (line - 1) + this.borderSize;
+	var textMaxWidth = this.itemWidth - this.textPadding() * 2;
+	var isItemHovered = this._hoverSelection === index;
+	var itemColors = this._data.itemColors;
+	if (isItemHovered) {
+		color = this._data.hoverColor;
+	} else if (this._selectedIndexes.contains(index)) {
+		color = this._data.selectorColor;
+	} else {
+		let isColumnOdd = column % 2 !== 0;
+		let isLineOdd = line % 2 !== 0;
+		let isBothOdd = isLineOdd && isColumnOdd;
+		let isNeitherOdd = !isLineOdd && !isColumnOdd;
+		color = (isBothOdd || isNeitherOdd) ? itemColors[0] : itemColors[1];
+	}
+	this.bitmap.clearRect(x, y, this.itemWidth, this.itemHeight);
+	this.bitmap.fillRect(x, y, this.itemWidth, this.itemHeight, color);
+	x += this.textPadding();
+	this.drawItemName({name: item.text, iconIndex: item.iconIndex}, x, y, textMaxWidth, this.itemHeight);
+};
+
+//========================================
+// Item List - Hover
+
+Sprite_ItemList.prototype.hoverSelect = function(index) {
+	var isIndexAvailable = (index > -1 && index < this.items().length);
+	var hoverIndex = isIndexAvailable ? index : -1;
+	if (this._hoverSelection !== hoverIndex) {
+		let oldHoverIndex = this._hoverSelection;
+		this._hoverSelection = hoverIndex;
+		this.redrawItem(this._hoverSelection);
+		this.redrawItem(oldHoverIndex);
+	}
+};
+
+Sprite_ItemList.prototype.getHoverIndex = function() {
+	if (!this.isHovered()) return -1;
+	if (this._items.length === 0) return -1;
+	var tx = TouchInput._cX;
+
+	var index = this.getOptionIndexOnXy(TouchInput._cX, TouchInput._cY);
+	var maxIndex = this.items().length - 1;
+	if (index < 0 || index > maxIndex) return -1;
+	return index;
+};
+
+
+Sprite_ItemList.prototype.onMouseLeave = function() {
+	SButton_Base.prototype.onMouseLeave.call(this);
+	if (this._hoverSelection !== -1) {
+		let hover = this._hoverSelection;
+		this._hoverSelection = -1;
+		this.redrawItem(hover);
+	}
+};
+
+Sprite_ItemList.prototype.getOptionIndexOnXy = function(x, y) {
+	var column, row;
+	var items = this.items();
+	if (!items.length) return -1;
+	x = x - this.realX() + this._scrollX;
+	y = y - this.realY() + this._scrollY;
+
+	if (this.columns < 2) {
+		column = 1;
+	} else {
+		let col_width = this.itemWidth + this._gap_col;
+		if (x > this._cols * col_width - this._gap_col) return -1; //Column out of range
+		if (x - Math.floor(x / col_width) * col_width > this.itemWidth) return -1; //Clicked on the gap
+		column = Math.ceil(x / col_width) || 1;
+	}
+
+	if (this.rows < 2) {
+		row = 1;
+	} else {
+		let row_width = this.itemHeight + this._gap_row;
+		if (y > this._rows * row_width - this._gap_row) return -1; //Row out of range
+		if (y - Math.floor(y / row_width) * row_width > this.itemHeight) return -1; //Clicked on the gap
+		row = Math.ceil(y / row_width) || 1;
+	}
+
+	return this._cols * (row - 1) + column - 1;
+};
+
+Sprite_ItemList.prototype.isMouseOverScroller = function() {
+	if (!this.isScroll()) return false;
+	var tx = TouchInput._cX;
+	var ty = TouchInput._cY;
+	var x1 = this.realX.call(this._scroller);
+	var x2 = x1 + this._scroller.width;
+	var y1 = this.realY.call(this._scroller);
+	var y2 = y1 + this._scroller.height;
+	return tx >= x1 && tx < x2 && ty >= y1 && ty < y2;
+};
+
+Sprite_ItemList.prototype.isMouseMoved = function() {
+	return this._lastHoverX != TouchInput._cX || this._lastHoverY != TouchInput._cY;
+};
+
+//========================================
+// Item List - Items' Management
+
+//Method - setItemList
+// * Redraws the list with the given list of items (an array)
+// * The array may contain the game objetcs (items, weapons and armors) or just strings
+Sprite_ItemList.prototype.setItemList = function(list) {
+	list = list || [];
+	if (!Array.isArray(list)) {
+		console.warn('The given list should be an array.')
+		return;
+	}
+	var max = this.maxItems();
+	this._items = [];
+	for(var d = 0; d < list.length; d++) {
+		if (list[d]) {
+			if (list[d].name) {
+				this._items.push({text: list[d].name, iconIndex: list[d].iconIndex}); //game objects
+			} else {
+				this._items.push({text: list[d], iconIndex: -2}); //just strings
+			}
+		}
+		if (d + 1 > max) break;
+	}
+	this.redraw();
+};
+
+// Method - add
+// * Adds an item to the list and redraws it
+// String: text -> the item's text
+// Number: iconIndex -> the index of the icon to be drawn before the text
+// String: textColor -> you can use hexadecimal or css colors
+// String: backColor -> you can use hexadecimal or css colors
+// String: imageName -> the image to be drawn as the item's body
+Sprite_ItemList.prototype.add = function(text, iconIndex, textColor, backColor, imageName) {
+	if (this._items.length >= this.maxItems()) return;
+	text = text || '';
+	iconIndex = iconIndex || -2;
+	textColor = textColor || '#ffffff';
+	backColor = backColor || '#000000';
+	imageName = imageName || '';
+	this.addItem({text, textColor, backColor, imageName});
+};
+
+// Method - addItem
+// * Adds an item to the list and redraws it
+// Object: item -> {text, textColor, backColor, imageName}
+Sprite_ItemList.prototype.addItem = function(item) {
+	this._items.push(item);
+	this.redraw();
+};
+
+Sprite_ItemList.prototype.items = function() {
+	return this._items;
+};
+
+Sprite_ItemList.prototype.getSelectedItems = function() {
+	var items = [];
+	for (var i = 0; i < this._selectedIndexes.length; i++) {
+		items.push(this.items()[this._selectedIndexes[i]].text);
+	}
+	return items;
+};
+
+Sprite_ItemList.prototype.deselectAllItems = function() {
+	if (!this.isAnyItemSelected()) return;
+	var selected = this._selectedIndexes.clone();
+	this._selectedIndexes = [];
+	for (var i = 0; i < selected.length; i++) {
+		this.redrawItem(selected[i]);
+	}
+};
+
+Sprite_ItemList.prototype.selectItem = function(index, ctrl) {
+	if (Array.isArray(index)) {
+		for (var i = 0; i < index.length; i++) {
+			if (Array.isArray(index[i])) {
+				continue;
+			}
+			this.selectItem(index[i], true);
+		}
+		return;
+	}
+	if (!(index > -1) || index >= this.items().length) return this.deselectAllItems();
+	if (this._selectedIndexes.contains(index)) { //The item is already selected
+		if (ctrl) {
+			//Deselect this item
+			this._selectedIndexes.splice(index, 1);
+			this.redrawItem(index);
+		} else if (this.isMultipleItemsSelected()) {
+			//Deselect all selected items but this one
+			this.deselectAllItems();
+			this.selectItem(index);
+		}
+		this.checkDoubleClick(index);
+	} else {
+		if (this.isAnyItemSelected() && !ctrl) {
+			this.deselectAllItems();
+		}
+		if (this._selectedIndexes.length < this._data.maxSelection) {
+			this._selectedIndexes.push(index);
+			this.redrawItem(index);
+			this.focusItem(index);
+			this.checkDoubleClick(index);			
+		}
+	}
+};
+
+Sprite_ItemList.prototype.checkDoubleClick = function(index) {
+	var selection = { index:index, frame:Graphics.frameCount };
+	if (!this._lastSelection) {
+		return this._lastSelection = selection;
+	}
+	if (this._lastSelection.index !== index) {
+		return this._lastSelection = selection;
+	}
+	var timespan = Graphics.frameCount - this._lastSelection.frame;
+	if (timespan > DOUBLE_CLICK_INTERVAL) {
+		return this._lastSelection = selection;
+	}
+	delete this._lastSelection;
+	return this.onDoubleClick();
+};
+
+//Method - focusItem
+// * Makes sure the item on the given index is visible for the user
+Sprite_ItemList.prototype.focusItem = function(index) {
+	if (!this.isScroll()) return;
+	var item_row = this.getItemRow(index);
+	var item_y = (this.itemHeight + this._gap_row) * (item_row - 1) + this.borderSize;
+	if (this._scrollY > item_y) {
+		this.setScrollY(item_y);
+		this._scroller._roller.y = this._scrollY / this._scroller._roller._tick;
+		return;
+	}
+
+	if (this._scrollY + this.height < item_y + this.itemHeight) {
+		this.setScrollY(item_y - this.height + this.itemHeight);
+		this._scroller._roller.y = this._scrollY / this._scroller._roller._tick;
+		return;
+	}
+};
+
+Sprite_ItemList.prototype.selectItemAbove = function(ctrl, shift) {
+	var itemIndex, itemRow, itemCol, lastRow, lastCol;
+	if (this.isEmpty()) return;
+	if (!this.isAnyItemSelected()) return this.selectItem(this.items().length - 1);
+	if (this.items().length == 1) return;
+	if ((ctrl || shift) && this._selectedIndexes.length >= this._data.maxSelection) return;
+
+	itemIndex = this._selectedIndexes.last();
+	itemRow = this.getItemRow(itemIndex);
+	itemCol = this.getItemCol(itemIndex);
+	lastRow = this.lastRow();
+	lastCol = this.lastCol();
+	if (lastRow === 1) return; //This list has only one line
+	if (itemRow === 1) { //Go to the last line
+		return this.selectItem(this.items().length - lastCol + Math.min(itemCol, lastCol) - 1, ctrl || shift);
+	}
+	return this.selectItem(itemIndex - this.columns, ctrl || shift);
+};
+
+Sprite_ItemList.prototype.selectNextItem = function(ctrl, shift) {
+	var itemIndex, lastIndex, nextIndex;
+	if (this.isEmpty()) return;
+	if (!this.isAnyItemSelected()) return this.selectItem(0);
+	if (this.items().length == 1) return;
+	if ((ctrl || shift) && this._selectedIndexes.length >= this._data.maxSelection) return;
+
+	itemIndex = this._selectedIndexes.last();
+	lastIndex = this.items().length - 1;
+	nextIndex = lastIndex > itemIndex ? itemIndex + 1 : 0;
+	return this.selectItem(nextIndex, ctrl || shift);
+};
+
+Sprite_ItemList.prototype.selectItemBeneath = function(ctrl, shift) {
+	var itemIndex, itemRow, itemCol, lastRow, lastCol, select;
+	if (this.isEmpty()) return;
+	if (!this.isAnyItemSelected()) return this.selectItem(0);
+	if ((ctrl || shift) && this._selectedIndexes.length >= this._data.maxSelection) return;
+
+	lastRow = this.lastRow();
+	if (lastRow === 1) return; //This list has only one line
+	lastCol = this.lastCol();
+	itemIndex = this._selectedIndexes.last();
+	itemRow = this.getItemRow(itemIndex);
+	itemCol = this.getItemCol(itemIndex);
+	if (itemRow === lastRow) return this.selectItem(itemCol - 1, ctrl || shift); //Go to the first line
+	return this.selectItem(Math.min(this.items().length - 1, itemIndex + this.columns), ctrl || shift);
+};
+
+Sprite_ItemList.prototype.selectPreviousItem = function(ctrl, shift) {
+	var itemIndex, previousIndex;
+	if (this.isEmpty()) return;
+	if (!this.isAnyItemSelected()) return this.selectItem(this.items().length - 1);
+	if (this.items().length == 1) return;
+	if ((ctrl || shift) && this._selectedIndexes.length >= this._data.maxSelection) return;
+
+	itemIndex = this._selectedIndexes.last();
+	previousIndex = itemIndex > 0 ? itemIndex - 1 : this.items().length - 1;
+	return this.selectItem(previousIndex, ctrl || shift);
+};
+
+//========================================
+// Item List - Resize
+
+Sprite_ItemList.prototype.resize = function(width, height) {
+	this.width = width;
+	this.height = height;
+};
+
+Sprite_ItemList.prototype.resizeBitmap = function(width, height) {
+	var isSizeChanged = this.bitmap.width === width || this.bitmap.height === height;
+	var isScrollerSizeChanged =  this._scroller.width === this._scroller_w;
+	if (!isSizeChanged && !isScrollerSizeChanged) return;
+	var borders_x, scroller_w;
+	var roller = this._scroller._roller;
+	var old_width = this.width;
+	var old_height = this.height;
+	var fontSize = this.bitmap ? this.bitmap.fontSize : 28;
+	this.bitmap = new Bitmap(width, height);
+	this.bitmap.fontSize = fontSize;
+	this.width = old_width;
+	this.height = old_height;
+	if (this.isScroll()) {
+		scroller_w = this._scroller_w;
+		borders_x = this._data.borderSize;
+		let base_height = this.height - this.borderSize * 2;
+		let roller_w = scroller_w;
+		let roller_h = Math.floor(base_height * base_height / this.bitmap.height);
+		let limit_y = this.height - roller_h;
+		roller.bitmap = new Bitmap(roller_w, roller_h);
+		roller.setDragLimits(0, 0, 0, limit_y);
+		roller._tick = (this.bitmap.height - this.height + this.borderSize) / (this.height - roller_h);
+		if (this._scroller.width !== scroller_w) {
+			this._scroller.bitmap.resize(scroller_w, this._scroller.height);
+			this._scroller.width = scroller_w;
+			this._scroller.x = this.width - scroller_w;
+		}
+	} else {
+		borders_x = this._data.borderSize * 2;
+		scroller_w = 0;
+		roller.bitmap.clear();
+	}
+	this._itemWidth = Math.ceil((this._data.width - borders_x - scroller_w) / this.columns - this._gap_col * (this.columns - 1));
+	roller.y = 0;
+	this.setScrollY(0);
+};
+
+//========================================
+// Item List - Scroll
+
+Sprite_ItemList.prototype.isScroll = function() {
+	return this.height < this.bitmap.height;
+};
+
+Sprite_ItemList.prototype.setScrollY = function(y) {
+	this._frame.y = y;
+	this._scrollY = y;
+	this._refresh();
+};
+
+//========================================
+// Item List - Others
+
+Sprite_ItemList.prototype.getIndexByString = function(string) {
+	var items = this.items();
+	for (var i = 0; i < items.length; i++) {
+		if (items[i].text == string) {
+			return i;
+		}
+	}
+	return -1;
+};
+
+Sprite_ItemList.prototype.onOkTriggered = function() {};
+
+Sprite_ItemList.prototype.onCancelled = function() {
+	this.deselectAllItems()
+};
+
+Sprite_ItemList.prototype.isCancelled = function() {
+	return Input.isTriggered('cancel') || TouchInput.isCancelled();
+};
+
+Sprite_ItemList.prototype.textPadding = function() {
+	return 4;
+};
+
+Sprite_ItemList.prototype.maxItems = function() {
+	return this.columns * this.rows;
+};
+
+Sprite_ItemList.prototype.isEmpty = function() {
+	return !this.items().length;
+};
+
+Sprite_ItemList.prototype.isAnyItemSelected = function() {
+	return !!this._selectedIndexes.length;
+};
+
+Sprite_ItemList.prototype.isMultipleItemsSelected = function() {
+	return this._selectedIndexes.length > 1;
+};
+
+Sprite_ItemList.prototype.getItemCol = function (index) {
+	if (!(index > 0)) return 1;
+	return ((index + 1) % this.columns) || this.columns;
+};
+
+Sprite_ItemList.prototype.getItemRow = function(index) {
+	if (!(index > 0)) return 1;
+	return Math.ceil((index + 1) / this.columns);
+};
+
+Sprite_ItemList.prototype.lastCol = function() {
+	return this.getItemCol(this.items().length - 1);
+};
+
+Sprite_ItemList.prototype.lastRow = function() {
+	return this.getItemRow(this.items().length - 1);
+};
+
+Sprite_ItemList.prototype.setGap = function(colGap, rowGap) {
+	this._gap_col = colGap == null ? 0 : colGap;
+	this._gap_row = rowGap == null ? 0 : rowGap;
+	this.redraw();
+};
+
+Sprite_ItemList.prototype.onSelect = function(touch) {
+	SButton_Base.prototype.onSelect.call(this, touch);
+	if (touch != null && !touch) return;
+	var ctrl = Input.isPressed('control');
+	var selected = this.getOptionIndexOnXy(TouchInput._x, TouchInput._y);
+	this.selectItem(selected, ctrl);
+
+};
+
+Sprite_ItemList.prototype.onReselect = function() {
+	SButton_Base.prototype.onReselect.call(this);
+	var ctrl = Input.isPressed('control');
+	var selected = this.getOptionIndexOnXy(TouchInput._x, TouchInput._y);
+	this.selectItem(selected, ctrl);
+};
+
+
+Sprite_ItemList.prototype.onDoubleClick = function(index) {
+	console.log('onDoubleClick')
+};
 
 //==========================================================================================
 // Sort Option Sprite
@@ -11656,15 +11210,42 @@ function Sort_Option() {
 Sort_Option.prototype = Object.create(SButton_Select.prototype);
 Sort_Option.prototype.constructor = Sort_Option;
 
+Sort_Option.prototype.initialize = function(data) {
+	SButton_Select.prototype.initialize.call(this, data);
+	console.log(data)
+};
+
 //------------------------------------------------------------------------------------------
 // Sort Option - Update
 
 Sort_Option.prototype.update = function() {
 	var parentFocused = this._parentFocused;
 	SButton_Select.prototype.update.call(this);
+	this.updateOpenTrigger(parentFocused);
+};
+
+Sort_Option.prototype.initBitmaps = function() {
+	var settings = $dataAchievsMenuSets.SortOption;
+	var width = eval(settings.width);
+	var height = eval(settings.height);
+	this.bitmap = new Bitmap(width, height);
+	this.txtChild = new Sprite(new Bitmap(width, height));
+	this.borders = new Sprite(new Bitmap(width, height));
+	this.addChild(this.txtChild);
+	this.addChild(this.borders);
+	this.bitmap.fontFace = this.fontFace;
+	this.bitmap.fontSize = this.fontSize;
+};
+
+Sort_Option.prototype.updateOpenTrigger = function(parentFocused) {
 	if (this.visible && Input.isTriggered('shift') && !parentFocused) {
 		if (this._data.open) {
-			this.closeOptions();
+			this._options.close();
+			var itemWindow = SceneManager._scene._itemWindow;
+			if (itemWindow) {
+				itemWindow.easyRefresh();
+				itemWindow.activate();
+			}
 		} else {
 			this.onClick();
 		}
@@ -11674,29 +11255,18 @@ Sort_Option.prototype.update = function() {
 //------------------------------------------------------------------------------------------
 // Sort Option - Refresh
 
-Sort_Option.prototype.onResize = function() {
-	this.createBitmap();
-	this.redraw(true);
-};
-
-Sort_Option.prototype.refresh = function() {
-	//this.redraw();
-};
-
-Sort_Option.prototype.createBitmap = function() {
-	var settings = $dataAchievsMenuSets.SortOption;
-	var width = eval(settings.width);
-	var height = eval(settings.height);
-	this.bitmap = new Bitmap(width, height);
-	this.bitmap.fontFace = this.fontFace;
-	this.bitmap.fontSize = this.fontSize;
-};
+Sort_Option.prototype.refresh = function() {};
 
 //------------------------------------------------------------------------------------------
 // Sort Option - Settings
 
 Sort_Option.prototype.defineSetting = function(parameter, value, refresh) {
 	SMO.AM.defineWindowSetting.call(this, 'SortOption', parameter, value, refresh);
+};
+
+Sort_Option.prototype.onResize = function() {
+	this.initBitmaps();
+	this.redraw(true);
 };
 
 //------------------------------------------------------------------------------------------
@@ -11722,6 +11292,7 @@ Sort_Option.prototype.onOptionChange = function(values, indexes) {
 		$gameSystem.achievs.sortType = indexes[0];
 		itemWindow._sortType = indexes[0];
 		itemWindow.refresh();
+		itemWindow.activate();
 	}
 };
 
@@ -11730,17 +11301,7 @@ Sort_Option.prototype.onOptionKeep = function() {
 	var itemWindow = SceneManager._scene._itemWindow;
 	if (itemWindow) {
 		itemWindow.easyRefresh();
-	}
-};
-
-//------------------------------------------------------------------------------------------
-// Sort Option - Other
-
-Sort_Option.prototype.closeOptions = function() {
-	SButton_Select.prototype.closeOptions.call(this);
-	var iw = SceneManager._scene._itemWindow;
-	if (iw) {
-		iw.activate();
+		itemWindow.activate();
 	}
 };
 
@@ -11956,57 +11517,6 @@ Achievements_Editor.prototype.editMenu = function() {
 };
 
 Achievements_Editor.prototype.onResize = function() {
-	var B1, B2, B3, B4;
-	var w = this._selectedWindow;
-	var data = $dataAchievsMenuSets[this._dataName];
-	if (!data) return;
-	//Button 1
-	B1 = this._genericButton1;
-	B1.value = data.x;
-	B1.description = 'Choose the X coordinate for the Pop Up window.';
-	B1.redrawMyText();
-	B1._extraText = 'X:';
-	B1._title = `${this._dataName}'s X`;
-	//Button 2
-	B2 = this._genericButton2;
-	B2.value = data.y;
-	B2.description = 'Choose the Y coordinate for the Pop Up window.';
-	B2.redrawMyText();
-	B2._extraText = 'Y:';
-	B2._title = `${this._dataName}'s Y`;
-	//Button 3
-	B3 = this._genericButton3;
-	B3.value = data.width;
-	B3.description = 'Choose the WIDTH for the Pop Up window.';
-	B3.redrawMyText();
-	B3._extraText = 'W:';
-	B3._title = `${this._dataName}'s Width`;
-	//Button 4
-	B4 = this._genericButton4;
-	B4.value = data.height;
-	B4.description = 'Choose the HEIGHT for the Pop Up window.';
-	B4.redrawMyText();
-	B4._extraText = 'H:';
-	B4._title = `${this._dataName}'s Height`;
-
-	this._generic = 4;
-	this.callPage('generic');
-};
-
-Achievements_Editor.prototype.onMaximize = function() {
-	this._maximizeButton.hideDescription();
-	var Scene = SceneManager._scene;
-	var Selected = this._lastGeneric;
-	SceneManager._scene.setSButtonsState('off');
-	Scene._darkTone.visible = true;
-	Scene._textInputButton.visible = true;
-	Scene._textInputButton.title.text = Selected._title;
-	Scene._textInputButton.value = Selected.value;
-	Scene._okButton.visible = true;
-	Scene._okButton.refreshPosition();
-	Scene._cancelButton.visible = true;
-	Scene._cancelButton.refreshPosition();
-	Scene.selectButton(Scene._textInputButton);
 };
 
 Achievements_Editor.prototype.popPage = function() {
@@ -12058,13 +11568,6 @@ Achievements_Editor.prototype.loadPage = function() {
 
 	//Specific buttons
 	switch(this._page) {
-	case 'generic':
-		for (var g = 1; g < this._generic + 1; g++) {
-			this.addChild(this['_genericButton' + g]);
-		}
-		this.addChild(this._maximizeButton);
-		this.parent.addChild(this.parent._textInputButton);
-		break;
 	case 'achiev': //Edit Achievements
 		this._dataName = 'Achievements';
 		break;
@@ -12098,19 +11601,6 @@ Achievements_Editor.prototype.drawPage = function() {
 	this.bitmap.clear();
 	this.drawBackground();
 	switch(this._page) {
-	case 'generic':
-		title = 'Settings';
-		for (var g = 1; g < this._generic + 1; g++) {
-			let name = `_genericButton${g}`;
-			let text = this[name]._extraText;
-			if (text) {
-				let x = this[name].x - 20;
-				let y = this[name].y + 5;
-				this.drawText(text, x, y, 20, 18, 'left');
-			}
-		}
-		this._generic = 0;
-		break;
 	case 'achiev':
 		title = 'ACHIEVEMENTS';
 		break;
@@ -12494,66 +11984,6 @@ Achievements_Editor.prototype.createButtons = function() {
 		this.y = 80 + line * 28;
 	};
 
-	//Generic buttons (used to get different kinds of values)
-	var genericHeight = 30;
-	var gButtons = {};
-	var gap = 5;
-	for (var a = 1; a < 5; a++) {
-		let name = `_genericButton${a}`;
-		gButtons[name] = {
-			id: name,
-			textAlign: 'center',
-			x: 62,
-			y: 36 + (genericHeight + gap) * (a - 1),
-			maxValue: 4000,
-			width: 90,
-			height: genericHeight,
-			fontSize: 15,
-			borderColor: '#ffffff',
-			backColor: '#000000'
-		};
-		this[name] = new SButton_Text(gButtons[name]);
-		this[name].onDeselect = function() {
-			SButton_Text.prototype.onDeselect.call(this);
-			this.parent._lastGeneric = this;
-		};
-	}
-
-	var maximizeButton = {
-		id: 'maximizeButton',
-		design: 'round-rect',
-		text: '🔲',
-		description: 'MAXIMIZE',
-		x: 157,
-		y: 0,
-		width: 25,
-		height: 25,
-		borderSize: 1,
-		borderColor: '#002200',
-		textAlign: 'center',
-		textOffset: [1, 0],
-		fontSize: 15,
-		backColor: '#555555',
-		onClick: this.onMaximize.bind(this)
-	};
-	this._maximizeButton = new SButton_Confirm(maximizeButton);
-	this._maximizeButton.visible = false;
-	this._maximizeButton.update = function() {
-		SButton_Confirm.prototype.update.call(this);
-		if (TouchInput.isPressed()) return;
-		this._button = SceneManager._scene.selectedButton();
-		//Only visible if there'as a button selected
-		var visible = !!this._button;
-		if (!visible) return this.visible = false;
-		visible = this._button.id.indexOf('generic') > -1;
-		if (!visible) return this.visible = false;
-		this.visible = true;
-		//Copy the selected button's Y coordinate
-		if (this.y != (this._button.y + 2)) {
-			this.y = this._button.y + 2;
-		}
-	};
-
 	var refreshButton = {
 		id: 'refreshButton',
 		design: 'round-rect',
@@ -12871,7 +12301,7 @@ Achievements_Editor.prototype.isGrabbing = function() {
 };
 
 Achievements_Editor.prototype.isProperPage = function(pageName) {
-	var pages = ['home', 'achiev', 'cat', 'menu', 'generic'];
+	var pages = ['home', 'achiev', 'cat', 'menu'];
 	return pages.contains(pageName);
 };
 
